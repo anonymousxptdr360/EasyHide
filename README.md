@@ -1,2 +1,4 @@
-# EasyHide
-A small tool that adds a customizable white rectangle to any image or document. It’s designed to hide personal information or remove ads on labels while saving ink when printing. Fast, lightweight, and easy to use.
+**A simple tool that adds a customizable white rectangle on images and PDF files.
+You can import PDF, JPG, or PNG and also export in PDF or image format.
+Useful for hiding personal information or removing ads while saving ink when printing.
+Lightweight, fast, and easy to use.**
