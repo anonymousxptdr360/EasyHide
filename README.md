@@ -1,5 +1,5 @@
 Hello everyone. To use my code, I recommend visiting my website or simply downloading the files.
-The tool is made in HTML, works locally in your browser, and keeps everything secure and confidential — nothing is uploaded anywhere.
+The tool is made in HTML, works locally in your browser, and keeps everything secure and confidential, nothing is uploaded anywhere.
 
 You must choose the area where the white rectangle will appear, then add your document, which can be an image or a PDF.
 If you upload a multi-page PDF or several images in a row, the rectangle will keep the position you set on the first document.
