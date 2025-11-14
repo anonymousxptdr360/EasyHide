@@ -1,4 +1,4 @@
-Hello everyone. To use my code, I recommend visiting my website or simply downloading the files.
+Hello everyone. To use my code, I recommend visiting [my website](https://stopbordo.odoo.com/bordereau) or [simply downloading the files](https://github.com/anonymousxptdr360/EasyHide/releases/tag/Html).
 The tool is made in HTML, works locally in your browser, and keeps everything secure and confidential, nothing is uploaded anywhere.
 
 You must choose the area where the white rectangle will appear, then add your document, which can be an image or a PDF.
