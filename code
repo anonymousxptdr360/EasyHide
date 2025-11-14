@@ -1,0 +1,745 @@
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Suppresseur de Publicités pour Bordereaux (Batch)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+    </script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior-y: contain; 
+        }
+        .a4-paper {
+            border: 2px solid #000;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            cursor: pointer;
+            background-color: #f0f0f0;
+        }
+        .quadrant {
+            border: 1px dashed #666;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .quadrant:hover {
+            background-color: #e0e0e0;
+        }
+        .quadrant.selected {
+            background-color: #ffffff !important;
+            border: 2px solid #3b82f6;
+        }
+        #message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #message-box.success { background-color: #28a745; }
+        #message-box.error { background-color: #dc3545; }
+        #message-box.info { background-color: #17a2b8; }
+
+        .quadrant-icon { font-size: 10px; color: #888; }
+        .portrait { width: 100px; height: 141.4px; }
+        .landscape { width: 141.4px; height: 100px; }
+
+        #imageCanvas {
+            touch-action: none; 
+        }
+        .handle { 
+            position: absolute; 
+            width: 14px; 
+            height: 14px;
+            background-color: rgba(255, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%; 
+            z-index: 10; 
+            touch-action: none; 
+        }
+        #loader {
+            border: 5px solid #f3f3f3; 
+            border-top: 5px solid #3498db; 
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+            display: none; 
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+
+
+    <div id="message-box"></div>
+
+    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-3xl">
+        <header class="mb-6 text-center">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl md:text-3xl font-bold text-gray-800 flex-grow text-center">Suppresseur de Publicités</h1>
+                <button id="resetAllButtonTop" title="Réinitialiser tous les paramètres" class="p-2 text-gray-500 hover:text-blue-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw">
+                        <path d="M3 2v6h6"></path>
+                        <path d="M3.31 15A9 9 0 0 0 20.7 7.5"></path>
+                        <path d="M21 22v-6h-6"></path>
+                        <path d="M20.7 9A9 9 0 0 0 3.31 16.5"></path>
+                    </svg>
+                </button>
+            </div>
+            <p class="text-gray-600 mt-1">Masquez les pubs sur plusieurs fichiers à la fois.</p>
+        </header>
+
+        <main>
+            <section id="step1Selection" class="mb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3 text-center">1. Zone initiale approximative :</h2>
+                 <div class="flex flex-col sm:flex-row justify-center items-center gap-6 sm:gap-10">
+                    <div>
+                        <p class="text-center text-sm font-medium text-gray-600 mb-1">Portrait</p>
+                        <div id="portrait-paper" class="a4-paper portrait rounded-md overflow-hidden mx-auto">
+                            <div class="quadrant" data-orientation="portrait" data-quadrant="0"><span class="quadrant-icon">HG</span></div>
+                            <div class="quadrant" data-orientation="portrait" data-quadrant="1"><span class="quadrant-icon">HD</span></div>
+                            <div class="quadrant" data-orientation="portrait" data-quadrant="2"><span class="quadrant-icon">BG</span></div>
+                            <div class="quadrant" data-orientation="portrait" data-quadrant="3"><span class="quadrant-icon">BD</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-center text-sm font-medium text-gray-600 mb-1">Paysage</p>
+                        <div id="landscape-paper" class="a4-paper landscape rounded-md overflow-hidden mx-auto">
+                            <div class="quadrant" data-orientation="landscape" data-quadrant="0"><span class="quadrant-icon">HG</span></div>
+                            <div class="quadrant" data-orientation="landscape" data-quadrant="1"><span class="quadrant-icon">HD</span></div>
+                            <div class="quadrant" data-orientation="landscape" data-quadrant="2"><span class="quadrant-icon">BG</span></div>
+                            <div class="quadrant" data-orientation="landscape" data-quadrant="3"><span class="quadrant-icon">BD</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="step2Upload" class="mb-6">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3 text-center">2. Téléversez vos fichiers (Images ou PDF) :</h2>
+                <div class="flex flex-col items-center">
+                    <input type="file" id="fileUpload" accept="image/*,application/pdf" multiple="" class="block w-full max-w-md text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold
+                        file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100
+                        mb-2 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="my-2 text-sm text-gray-600">Format de sortie (si applicable) :
+                        <select id="outputFormatSelect" class="ml-2 p-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="source">Comme source (PDF reste PDF, Image reste Image)</option>
+                            <option value="image/png">PNG</option>
+                            <option value="image/jpeg">JPEG</option>
+                            <option value="application/pdf">PDF (convertir tout en PDF)</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="step3Adjust" class="mb-6 text-center">
+                 <h2 class="text-xl font-semibold text-gray-700 mb-3">3. Ajustez la zone sur le 1er fichier et validez :</h2>
+                <button id="initiateProcessingButton" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-50" disabled="">
+                    Afficher 1er Fichier et Ajuster Zone
+                </button>
+                <div id="canvasContainer" class="relative flex flex-col items-center mt-4"> 
+                    <canvas id="imageCanvas" class="border border-gray-400 rounded-lg shadow-md max-w-full h-auto" style="display: none;"></canvas>
+                </div>
+                <div id="loader"></div>
+                <button id="applyAndDownloadButton" class="hidden mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition duration-150 ease-in-out">
+                    Appliquer à Tous et Télécharger
+                </button>
+            </section>
+        </main>
+        <footer class="mt-8 pt-4 border-t border-gray-200 flex justify-center">
+             <button id="resetAllButtonBottom" title="Réinitialiser tous les paramètres" class="p-2 text-gray-500 hover:text-blue-600 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw">
+                    <path d="M3 2v6h6"></path>
+                    <path d="M3.31 15A9 9 0 0 0 20.7 7.5"></path>
+                    <path d="M21 22v-6h-6"></path>
+                    <path d="M20.7 9A9 9 0 0 0 3.31 16.5"></path>
+                </svg>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf; 
+
+        // Références DOM
+        const allQuadrants = document.querySelectorAll('.quadrant');
+        const fileUpload = document.getElementById('fileUpload');
+        const outputFormatSelect = document.getElementById('outputFormatSelect');
+        const initiateProcessingButton = document.getElementById('initiateProcessingButton');
+        const imageCanvas = document.getElementById('imageCanvas');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const applyAndDownloadButton = document.getElementById('applyAndDownloadButton');
+        const messageBox = document.getElementById('message-box');
+        const loader = document.getElementById('loader');
+        const resetAllButtonTop = document.getElementById('resetAllButtonTop'); 
+        const resetAllButtonBottom = document.getElementById('resetAllButtonBottom');
+        const ctx = imageCanvas.getContext('2d');
+
+        // État global
+        let selectedQuadrantInfo = { orientation: null, quadrantIndex: null };
+        let allUploadedFiles = []; 
+        let currentFileForAdjustment = null; 
+        
+        let currentSelectionRect = { x: 0, y: 0, w: 0, h: 0, isDefined: false };
+        let activeDragAction = null; 
+        let dragStartCoords = { x: 0, y: 0 }; 
+        let rectStartCoords = { x: 0, y: 0, w: 0, h: 0 };
+        const HANDLE_SIZE = 14; 
+        let handles = []; 
+
+        // --- Constantes pour PDF A4 (en points, 1pt = 1/72 inch) ---
+        const A4_WIDTH_PT = 595.28;
+        const A4_HEIGHT_PT = 841.89;
+
+
+        function showMessage(text, type = 'info', duration = 4000) {
+            messageBox.textContent = text;
+            messageBox.className = ''; 
+            messageBox.classList.add(type);
+            messageBox.style.display = 'block';
+            setTimeout(() => { messageBox.style.display = 'none'; }, duration);
+        }
+
+        function checkInitiateButtonState() {
+            initiateProcessingButton.disabled = !(allUploadedFiles.length > 0 && selectedQuadrantInfo.quadrantIndex !== null);
+        }
+
+        allQuadrants.forEach(quadrant => {
+            quadrant.addEventListener('click', () => {
+                allQuadrants.forEach(q => q.classList.remove('selected'));
+                quadrant.classList.add('selected');
+                selectedQuadrantInfo.orientation = quadrant.dataset.orientation;
+                selectedQuadrantInfo.quadrantIndex = parseInt(quadrant.dataset.quadrant);
+                checkInitiateButtonState();
+                showMessage(`Zone initiale: ${selectedQuadrantInfo.orientation}, Q${selectedQuadrantInfo.quadrantIndex + 1}. Téléversez des fichiers.`, 'info');
+            });
+        });
+
+        fileUpload.addEventListener('change', (event) => {
+            if (event.target.files.length === 0) {
+                allUploadedFiles = [];
+                currentFileForAdjustment = null;
+                resetCanvasAndState(false); 
+                checkInitiateButtonState();
+                return;
+            }
+            
+            allUploadedFiles = Array.from(event.target.files);
+            currentFileForAdjustment = null; 
+            resetCanvasAndState(false); 
+
+            if (allUploadedFiles.length > 0) {
+                showMessage(`${allUploadedFiles.length} fichier(s) sélectionné(s). Prêt à ajuster le 1er.`, 'success');
+            }
+            checkInitiateButtonState();
+        });
+        
+        async function loadFileForAdjustment(file) {
+            return new Promise((resolve, reject) => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = () => reject(new Error('Erreur chargement image pour ajustement.'));
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = () => reject(new Error('Erreur lecture fichier image.'));
+                    reader.readAsDataURL(file);
+                } else if (file.type === 'application/pdf') {
+                    const fileReader = new FileReader();
+                    fileReader.onload = function() {
+                        const typedarray = new Uint8Array(this.result);
+                        pdfjsLib.getDocument(typedarray).promise.then(pdfDoc_ => {
+                            pdfDoc_.getPage(1).then(page => {
+                                const viewport = page.getViewport({ scale: 2.0 }); 
+                                const tempCanvas = document.createElement('canvas');
+                                const tempCtx = tempCanvas.getContext('2d');
+                                tempCanvas.height = viewport.height;
+                                tempCanvas.width = viewport.width;
+                                page.render({ canvasContext: tempCtx, viewport: viewport }).promise.then(() => {
+                                    const img = new Image();
+                                    img.onload = () => resolve(img); 
+                                    img.onerror = () => reject(new Error('Erreur conversion 1ère page PDF en image.'));
+                                    img.src = tempCanvas.toDataURL('image/png');
+                                }).catch(reject);
+                            }).catch(reject);
+                        }).catch(reject);
+                    };
+                    fileReader.onerror = () => reject(new Error('Erreur lecture fichier PDF.'));
+                    fileReader.readAsArrayBuffer(file);
+                } else {
+                    reject(new Error('Type de fichier non supporté pour l\'ajustement.'));
+                }
+            });
+        }
+
+        initiateProcessingButton.addEventListener('click', async () => {
+            if (allUploadedFiles.length === 0 || selectedQuadrantInfo.quadrantIndex === null) {
+                showMessage('Sélectionnez zone ET téléversez au moins un fichier.', 'error');
+                return;
+            }
+            
+            loader.style.display = 'block';
+            initiateProcessingButton.disabled = true;
+
+            try {
+                currentFileForAdjustment = await loadFileForAdjustment(allUploadedFiles[0]);
+                setupInteractiveStage(currentFileForAdjustment); 
+                initiateProcessingButton.classList.add('hidden');
+                applyAndDownloadButton.classList.remove('hidden');
+                imageCanvas.style.display = 'block';
+                showMessage('Ajustez le rectangle sur ce 1er fichier, puis validez.', 'info');
+            } catch (error) {
+                showMessage(error.message || 'Erreur chargement du 1er fichier.', 'error');
+                console.error("Error loading first file for adjustment:", error);
+            } finally {
+                loader.style.display = 'none';
+                initiateProcessingButton.disabled = false; 
+            }
+        });
+
+        function setupInteractiveStage(imageToAdjust) { 
+            imageCanvas.width = imageToAdjust.width;
+            imageCanvas.height = imageToAdjust.height;
+            
+            const imgW = imageToAdjust.width;
+            const imgH = imageToAdjust.height;
+            currentSelectionRect.w = imgW / 2;
+            currentSelectionRect.h = imgH / 2;
+
+            switch (selectedQuadrantInfo.quadrantIndex) {
+                case 0: currentSelectionRect.x = 0; currentSelectionRect.y = 0; break;
+                case 1: currentSelectionRect.x = imgW / 2; currentSelectionRect.y = 0; break;
+                case 2: currentSelectionRect.x = 0; currentSelectionRect.y = imgH / 2; break;
+                case 3: currentSelectionRect.x = imgW / 2; currentSelectionRect.y = imgH / 2; break;
+            }
+            currentSelectionRect.isDefined = true;
+            createHandles();
+            drawCanvasWithSelectionAndHandles(imageToAdjust); 
+        }
+        
+        function drawCanvasWithSelectionAndHandles(imageToDraw, isFinal = false) {
+            if (!imageToDraw) return; 
+            ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+            ctx.drawImage(imageToDraw, 0, 0, imageCanvas.width, imageCanvas.height); 
+
+            if (currentSelectionRect.isDefined) {
+                if (isFinal) {
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(currentSelectionRect.x, currentSelectionRect.y, currentSelectionRect.w, currentSelectionRect.h);
+                    removeHandles(); 
+                } else {
+                    ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(currentSelectionRect.x, currentSelectionRect.y, currentSelectionRect.w, currentSelectionRect.h);
+                    updateHandlesPositions();
+                }
+            }
+        }
+
+        function createHandles() {
+            removeHandles(); 
+            const handleTypes = ['tl', 't', 'tr', 'l', 'r', 'bl', 'b', 'br']; 
+            handleTypes.forEach(type => {
+                const handle = document.createElement('div');
+                handle.classList.add('handle');
+                handle.dataset.type = type;
+                canvasContainer.appendChild(handle);
+                handles.push(handle);
+            });
+            updateHandlesPositions(); 
+        }
+
+        function removeHandles() {
+            handles.forEach(h => h.remove());
+            handles = [];
+        }
+
+        function updateHandlesPositions() {
+            if (!currentSelectionRect.isDefined || handles.length === 0 || !imageCanvas.offsetParent) return;
+            const { x, y, w, h } = currentSelectionRect;
+            const canvasRect = imageCanvas.getBoundingClientRect(); 
+
+            const scaleX = canvasRect.width / imageCanvas.width;
+            const scaleY = canvasRect.height / imageCanvas.height;
+
+            const positions = {
+                'tl': { left: x * scaleX - HANDLE_SIZE / 2, top: y * scaleY - HANDLE_SIZE / 2 },
+                't':  { left: (x + w / 2) * scaleX - HANDLE_SIZE / 2, top: y * scaleY - HANDLE_SIZE / 2 },
+                'tr': { left: (x + w) * scaleX - HANDLE_SIZE / 2, top: y * scaleY - HANDLE_SIZE / 2 },
+                'l':  { left: x * scaleX - HANDLE_SIZE / 2, top: (y + h / 2) * scaleY - HANDLE_SIZE / 2 },
+                'r':  { left: (x + w) * scaleX - HANDLE_SIZE / 2, top: (y + h / 2) * scaleY - HANDLE_SIZE / 2 },
+                'bl': { left: x * scaleX - HANDLE_SIZE / 2, top: (y + h) * scaleY - HANDLE_SIZE / 2 },
+                'b':  { left: (x + w / 2) * scaleX - HANDLE_SIZE / 2, top: (y + h) * scaleY - HANDLE_SIZE / 2 },
+                'br': { left: (x + w) * scaleX - HANDLE_SIZE / 2, top: (y + h) * scaleY - HANDLE_SIZE / 2 }
+            };
+
+            handles.forEach(handle => {
+                const type = handle.dataset.type;
+                handle.style.left = `${canvasRect.left + positions[type].left - canvasContainer.getBoundingClientRect().left}px`;
+                handle.style.top = `${canvasRect.top + positions[type].top - canvasContainer.getBoundingClientRect().top}px`;
+                handle.style.cursor = getResizeCursor(type);
+                handle.style.display = 'block';
+            });
+        }
+        
+        function getResizeCursor(handleType) { 
+            switch (handleType) {
+                case 'tl': case 'br': return 'nwse-resize';
+                case 'tr': case 'bl': return 'nesw-resize';
+                case 't':  case 'b':  return 'ns-resize';
+                case 'l':  case 'r':  return 'ew-resize';
+                default: return 'default';
+            }
+        }
+        function getEventPosOnCanvas(event) { 
+            const rect = imageCanvas.getBoundingClientRect();
+            let clientX, clientY;
+            if (event.touches && event.touches.length > 0) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+            return {
+                x: (clientX - rect.left) * (imageCanvas.width / rect.width),
+                y: (clientY - rect.top) * (imageCanvas.height / rect.height)
+            };
+        }
+        function handleInteractionStart(e) { 
+            if (!currentSelectionRect.isDefined || !currentFileForAdjustment) return; 
+            
+            const target = e.target;
+            const eventPos = getEventPosOnCanvas(e);
+
+            if (target.classList.contains('handle')) { 
+                activeDragAction = `resize-${target.dataset.type}`;
+            } else if (target === imageCanvas && 
+                       eventPos.x >= currentSelectionRect.x && eventPos.x <= currentSelectionRect.x + currentSelectionRect.w &&
+                       eventPos.y >= currentSelectionRect.y && eventPos.y <= currentSelectionRect.y + currentSelectionRect.h) {
+                activeDragAction = 'move';
+            } else {
+                return; 
+            }
+            
+            if (activeDragAction && e.cancelable) {
+                 e.preventDefault();
+            }
+            dragStartCoords = eventPos;
+            rectStartCoords = { ...currentSelectionRect }; 
+        }
+        function handleInteractionMove(e) { 
+            if (!activeDragAction || !currentSelectionRect.isDefined) {
+                if (e.type === 'mousemove' && (e.target === imageCanvas || e.target.classList.contains('handle'))) {
+                    const mousePos = getEventPosOnCanvas(e);
+                    let cursor = 'default';
+                    if (currentSelectionRect.isDefined) {
+                        for (const handle of handles) {
+                            const handleRect = handle.getBoundingClientRect();
+                            const canvasRect = imageCanvas.getBoundingClientRect();
+                            const handleCanvasX = (handleRect.left - canvasRect.left + HANDLE_SIZE/2) * (imageCanvas.width / canvasRect.width);
+                            const handleCanvasY = (handleRect.top - canvasRect.top + HANDLE_SIZE/2) * (imageCanvas.height / canvasRect.height);
+                            
+                            if (Math.abs(mousePos.x - handleCanvasX) < HANDLE_SIZE && Math.abs(mousePos.y - handleCanvasY) < HANDLE_SIZE * 1.5) {
+                                cursor = getResizeCursor(handle.dataset.type);
+                                break;
+                            }
+                        }
+                        if (cursor === 'default' && 
+                            mousePos.x >= currentSelectionRect.x && mousePos.x <= currentSelectionRect.x + currentSelectionRect.w &&
+                            mousePos.y >= currentSelectionRect.y && mousePos.y <= currentSelectionRect.y + currentSelectionRect.h) {
+                            cursor = 'move';
+                        }
+                    }
+                    imageCanvas.style.cursor = cursor;
+                }
+                return;
+            }
+
+            if (e.cancelable) {
+                e.preventDefault(); 
+            }
+
+            const eventPos = getEventPosOnCanvas(e);
+            const deltaX = eventPos.x - dragStartCoords.x;
+            const deltaY = eventPos.y - dragStartCoords.y;
+            let { x, y, w, h } = rectStartCoords; 
+
+            if (activeDragAction === 'move') {
+                x += deltaX;
+                y += deltaY;
+            } else if (activeDragAction.startsWith('resize-')) {
+                const type = activeDragAction.split('-')[1];
+                if (type.includes('l')) { x += deltaX; w -= deltaX; }
+                if (type.includes('r')) { w += deltaX; }
+                if (type.includes('t')) { y += deltaY; h -= deltaY; }
+                if (type.includes('b')) { h += deltaY; }
+            }
+
+            const minSize = 20; 
+            if (w < minSize) {
+                if (activeDragAction.includes('l') || activeDragAction.includes('tl') || activeDragAction.includes('bl')) x = rectStartCoords.x + rectStartCoords.w - minSize;
+                w = minSize;
+            }
+            if (h < minSize) {
+                if (activeDragAction.includes('t') || activeDragAction.includes('tl') || activeDragAction.includes('tr')) y = rectStartCoords.y + rectStartCoords.h - minSize;
+                h = minSize;
+            }
+            
+            x = Math.max(0, Math.min(x, imageCanvas.width - w));
+            y = Math.max(0, Math.min(y, imageCanvas.height - h));
+            w = Math.min(w, imageCanvas.width - x);
+            h = Math.min(h, imageCanvas.height - y);
+
+            currentSelectionRect = { x, y, w, h, isDefined: true };
+            drawCanvasWithSelectionAndHandles(currentFileForAdjustment); 
+        }
+        function handleInteractionEnd(e) { 
+             if (activeDragAction) {
+                activeDragAction = null;
+                imageCanvas.style.cursor = 'default'; 
+                updateHandlesPositions(); 
+            }
+        }
+
+        canvasContainer.addEventListener('mousedown', handleInteractionStart);
+        document.addEventListener('mousemove', handleInteractionMove);
+        document.addEventListener('mouseup', handleInteractionEnd);
+        canvasContainer.addEventListener('touchstart', handleInteractionStart, { passive: false });
+        document.addEventListener('touchmove', handleInteractionMove, { passive: false });
+        document.addEventListener('touchend', handleInteractionEnd);
+        
+        applyAndDownloadButton.addEventListener('click', async () => {
+            if (!currentSelectionRect.isDefined || allUploadedFiles.length === 0) {
+                showMessage('Zone non définie ou aucun fichier chargé.', 'error');
+                return;
+            }
+            loader.style.display = 'block';
+            applyAndDownloadButton.disabled = true;
+            let filesProcessedCount = 0;
+            const chosenOutputFormat = outputFormatSelect.value;
+
+            for (let i = 0; i < allUploadedFiles.length; i++) {
+                const file = allUploadedFiles[i];
+                const originalFilename = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                showMessage(`Traitement de ${file.name} (${i+1}/${allUploadedFiles.length})...`, 'info', 60000); 
+
+                try {
+                    let effectiveOutputFormat = chosenOutputFormat;
+                    if (chosenOutputFormat === 'source') {
+                        effectiveOutputFormat = file.type.startsWith('image/') ? (file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png') : 'application/pdf';
+                    }
+                    
+                    if (file.type.startsWith('image/')) {
+                        const img = await loadFileForAdjustment(file); 
+                        const tempCanvas = document.createElement('canvas');
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCanvas.width = img.width;
+                        tempCanvas.height = img.height;
+                        tempCtx.drawImage(img, 0, 0);
+                        tempCtx.fillStyle = 'white';
+                        
+                        const scaleX = img.width / currentFileForAdjustment.width;
+                        const scaleY = img.height / currentFileForAdjustment.height;
+                        tempCtx.fillRect(currentSelectionRect.x * scaleX, 
+                                         currentSelectionRect.y * scaleY, 
+                                         currentSelectionRect.w * scaleX, 
+                                         currentSelectionRect.h * scaleY);
+                        
+                        if (effectiveOutputFormat === 'application/pdf') { 
+                            const pdfOutput = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+                            const pageDataUrl = tempCanvas.toDataURL('image/png'); 
+                            
+                            let pageOrientation = img.width > img.height ? 'l' : 'p';
+                            let targetWidthPt = pageOrientation === 'l' ? A4_HEIGHT_PT : A4_WIDTH_PT;
+                            let targetHeightPt = pageOrientation === 'l' ? A4_WIDTH_PT : A4_HEIGHT_PT;
+                            
+                            pdfOutput.internal.pageSize.width = targetWidthPt;
+                            pdfOutput.internal.pageSize.height = targetHeightPt;
+
+                            const ratio = Math.min(targetWidthPt / img.width, targetHeightPt / img.height);
+                            const scaledWidth = img.width * ratio;
+                            const scaledHeight = img.height * ratio;
+                            const xOffset = (targetWidthPt - scaledWidth) / 2;
+                            const yOffset = (targetHeightPt - scaledHeight) / 2;
+
+                            pdfOutput.addImage(pageDataUrl, 'PNG', xOffset, yOffset, scaledWidth, scaledHeight);
+                            pdfOutput.save(`${originalFilename}_modifie.pdf`);
+                        } else { 
+                            const extension = effectiveOutputFormat === 'image/jpeg' ? 'jpg' : 'png';
+                            const dataURL = tempCanvas.toDataURL(effectiveOutputFormat, effectiveOutputFormat === 'image/jpeg' ? 0.9 : undefined); 
+                            triggerDownload(dataURL, `${originalFilename}_modifie.${extension}`);
+                        }
+                        filesProcessedCount++;
+
+                    } else if (file.type === 'application/pdf') { 
+                        const fileReader = new FileReader();
+                        const arrayBuffer = await new Promise((resolve, reject) => {
+                            fileReader.onload = () => resolve(fileReader.result);
+                            fileReader.onerror = reject;
+                            fileReader.readAsArrayBuffer(file);
+                        });
+                        const pdfDocInstance = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
+                        const numPages = pdfDocInstance.numPages;
+
+                        if (effectiveOutputFormat === 'image/png' || effectiveOutputFormat === 'image/jpeg') { 
+                            const page = await pdfDocInstance.getPage(1); 
+                            const viewport = page.getViewport({ scale: 2.0 }); 
+                            const tempCanvas = document.createElement('canvas');
+                            const tempCtx = tempCanvas.getContext('2d');
+                            tempCanvas.width = viewport.width;
+                            tempCanvas.height = viewport.height;
+                            await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+                            tempCtx.fillStyle = 'white';
+                            
+                            const scaleToPageX = viewport.width / currentFileForAdjustment.width;
+                            const scaleToPageY = viewport.height / currentFileForAdjustment.height;
+                            tempCtx.fillRect(currentSelectionRect.x * scaleToPageX, 
+                                             currentSelectionRect.y * scaleToPageY, 
+                                             currentSelectionRect.w * scaleToPageX, 
+                                             currentSelectionRect.h * scaleToPageY);
+
+                            const extension = effectiveOutputFormat === 'image/jpeg' ? 'jpg' : 'png';
+                            const dataURL = tempCanvas.toDataURL(effectiveOutputFormat, effectiveOutputFormat === 'image/jpeg' ? 0.9 : undefined);
+                            triggerDownload(dataURL, `${originalFilename}_page1_modifie.${extension}`);
+                        } else { // PDF to PDF
+                            let pdfOutput; 
+                            for (let j = 1; j <= numPages; j++) {
+                                const page = await pdfDocInstance.getPage(j);
+                                const viewport = page.getViewport({ scale: 2.0 }); 
+                                
+                                let pageOrientation = viewport.width > viewport.height ? 'l' : 'p';
+                                let pageTargetWidthPt = pageOrientation === 'l' ? A4_HEIGHT_PT : A4_WIDTH_PT;
+                                let pageTargetHeightPt = pageOrientation === 'l' ? A4_WIDTH_PT : A4_HEIGHT_PT;
+
+                                if (j === 1) {
+                                    pdfOutput = new jsPDF({ orientation: pageOrientation, unit: 'pt', format: [pageTargetWidthPt, pageTargetHeightPt] });
+                                } else {
+                                    pdfOutput.addPage([pageTargetWidthPt, pageTargetHeightPt], pageOrientation);
+                                }
+                                
+                                const tempCanvas = document.createElement('canvas');
+                                const tempCtx = tempCanvas.getContext('2d');
+                                tempCanvas.width = viewport.width;   
+                                tempCanvas.height = viewport.height;
+                                await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+                                
+                                tempCtx.fillStyle = 'white';
+                                const scaleToPageX = viewport.width / currentFileForAdjustment.width;
+                                const scaleToPageY = viewport.height / currentFileForAdjustment.height;
+                                tempCtx.fillRect(currentSelectionRect.x * scaleToPageX, 
+                                                 currentSelectionRect.y * scaleToPageY, 
+                                                 currentSelectionRect.w * scaleToPageX, 
+                                                 currentSelectionRect.h * scaleToPageY);
+                                
+                                const pageDataUrl = tempCanvas.toDataURL('image/png');
+                                const ratio = Math.min(pageTargetWidthPt / viewport.width, pageTargetHeightPt / viewport.height);
+                                const scaledWidth = viewport.width * ratio;
+                                const scaledHeight = viewport.height * ratio;
+                                const xOffset = (pageTargetWidthPt - scaledWidth) / 2;
+                                const yOffset = (pageTargetHeightPt - scaledHeight) / 2;
+                                pdfOutput.addImage(pageDataUrl, 'PNG', xOffset, yOffset, scaledWidth, scaledHeight);
+                            }
+                            if (pdfOutput) { 
+                               pdfOutput.save(`${originalFilename}_modifie.pdf`);
+                            } else if (numPages > 0) { 
+                                console.error("pdfOutput was not initialized for PDF:", file.name);
+                                showMessage(`Erreur interne lors de la création du PDF pour ${file.name}`, 'error');
+                            }
+                        }
+                        filesProcessedCount++;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 200)); 
+                } catch (err) {
+                    console.error("Erreur traitement fichier:", file.name, err);
+                    showMessage(`Erreur avec ${file.name}: ${err.message || 'Inconnue'}`, 'error');
+                }
+            }
+            
+            loader.style.display = 'none';
+            applyAndDownloadButton.disabled = false;
+            if (filesProcessedCount > 0) {
+                showMessage(`${filesProcessedCount} fichier(s) traité(s) et téléchargé(s).`, 'success');
+            } else if (allUploadedFiles.length > 0) {
+                 showMessage(`Aucun fichier n'a pu être traité avec succès.`, 'error');
+            }
+
+            initiateProcessingButton.classList.remove('hidden');
+            applyAndDownloadButton.classList.add('hidden');
+        });
+
+        function triggerDownload(dataURL, filename) {
+            const link = document.createElement('a');
+            link.href = dataURL;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        resetAllButtonTop.addEventListener('click', () => {
+            resetApplicationState();
+            showMessage('Tous les paramètres ont été réinitialisés.', 'info');
+        });
+        resetAllButtonBottom.addEventListener('click', () => {
+            resetApplicationState();
+            showMessage('Tous les paramètres ont été réinitialisés.', 'info');
+        });
+
+
+        function resetApplicationState() {
+            allQuadrants.forEach(q => q.classList.remove('selected'));
+            selectedQuadrantInfo = { orientation: null, quadrantIndex: null };
+            allUploadedFiles = [];
+            fileUpload.value = ''; 
+            resetCanvasAndState(true); 
+            outputFormatSelect.value = 'source';
+            initiateProcessingButton.disabled = true;
+            initiateProcessingButton.classList.remove('hidden');
+            applyAndDownloadButton.classList.add('hidden');
+            loader.style.display = 'none';
+            messageBox.style.display = 'none';
+        }
+
+
+        function resetCanvasAndState(resetQuadrantSelectionInternal = true) { 
+            ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+            imageCanvas.style.display = 'none';
+            removeHandles();
+            currentFileForAdjustment = null; 
+            currentSelectionRect.isDefined = false;
+            activeDragAction = null;
+            
+            if (resetQuadrantSelectionInternal) { 
+                allQuadrants.forEach(q => q.classList.remove('selected'));
+                selectedQuadrantInfo = { orientation: null, quadrantIndex: null };
+            }
+            checkInitiateButtonState();
+        }
+
+        checkInitiateButtonState(); 
+        window.addEventListener('resize', () => { 
+            if (currentSelectionRect.isDefined && handles.length > 0 && imageCanvas.offsetParent) {
+                updateHandlesPositions();
+            }
+        });
+
+    </script>
