@@ -1,745 +1,1540 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
 <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Suppresseur de Publicités pour Bordereaux (Batch)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
-    </script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            overscroll-behavior-y: contain; 
-        }
-        .a4-paper {
-            border: 2px solid #000;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            grid-template-rows: repeat(2, 1fr);
-            cursor: pointer;
-            background-color: #f0f0f0;
-        }
-        .quadrant {
-            border: 1px dashed #666;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: background-color 0.2s ease-in-out;
-        }
-        .quadrant:hover {
-            background-color: #e0e0e0;
-        }
-        .quadrant.selected {
-            background-color: #ffffff !important;
-            border: 2px solid #3b82f6;
-        }
-        #message-box {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 10px 20px;
-            border-radius: 8px;
-            color: white;
-            z-index: 1000;
-            display: none;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        #message-box.success { background-color: #28a745; }
-        #message-box.error { background-color: #dc3545; }
-        #message-box.info { background-color: #17a2b8; }
-
-        .quadrant-icon { font-size: 10px; color: #888; }
-        .portrait { width: 100px; height: 141.4px; }
-        .landscape { width: 141.4px; height: 100px; }
-
-        #imageCanvas {
-            touch-action: none; 
-        }
-        .handle { 
-            position: absolute; 
-            width: 14px; 
-            height: 14px;
-            background-color: rgba(255, 0, 0, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            border-radius: 50%; 
-            z-index: 10; 
-            touch-action: none; 
-        }
-        #loader {
-            border: 5px solid #f3f3f3; 
-            border-top: 5px solid #3498db; 
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
-            display: none; 
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-
-
-
-    <div id="message-box"></div>
-
-    <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-3xl">
-        <header class="mb-6 text-center">
-            <div class="flex justify-between items-center">
-                <h1 class="text-2xl md:text-3xl font-bold text-gray-800 flex-grow text-center">Suppresseur de Publicités</h1>
-                <button id="resetAllButtonTop" title="Réinitialiser tous les paramètres" class="p-2 text-gray-500 hover:text-blue-600 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw">
-                        <path d="M3 2v6h6"></path>
-                        <path d="M3.31 15A9 9 0 0 0 20.7 7.5"></path>
-                        <path d="M21 22v-6h-6"></path>
-                        <path d="M20.7 9A9 9 0 0 0 3.31 16.5"></path>
-                    </svg>
-                </button>
-            </div>
-            <p class="text-gray-600 mt-1">Masquez les pubs sur plusieurs fichiers à la fois.</p>
-        </header>
-
-        <main>
-            <section id="step1Selection" class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-3 text-center">1. Zone initiale approximative :</h2>
-                 <div class="flex flex-col sm:flex-row justify-center items-center gap-6 sm:gap-10">
-                    <div>
-                        <p class="text-center text-sm font-medium text-gray-600 mb-1">Portrait</p>
-                        <div id="portrait-paper" class="a4-paper portrait rounded-md overflow-hidden mx-auto">
-                            <div class="quadrant" data-orientation="portrait" data-quadrant="0"><span class="quadrant-icon">HG</span></div>
-                            <div class="quadrant" data-orientation="portrait" data-quadrant="1"><span class="quadrant-icon">HD</span></div>
-                            <div class="quadrant" data-orientation="portrait" data-quadrant="2"><span class="quadrant-icon">BG</span></div>
-                            <div class="quadrant" data-orientation="portrait" data-quadrant="3"><span class="quadrant-icon">BD</span></div>
-                        </div>
-                    </div>
-                    <div>
-                        <p class="text-center text-sm font-medium text-gray-600 mb-1">Paysage</p>
-                        <div id="landscape-paper" class="a4-paper landscape rounded-md overflow-hidden mx-auto">
-                            <div class="quadrant" data-orientation="landscape" data-quadrant="0"><span class="quadrant-icon">HG</span></div>
-                            <div class="quadrant" data-orientation="landscape" data-quadrant="1"><span class="quadrant-icon">HD</span></div>
-                            <div class="quadrant" data-orientation="landscape" data-quadrant="2"><span class="quadrant-icon">BG</span></div>
-                            <div class="quadrant" data-orientation="landscape" data-quadrant="3"><span class="quadrant-icon">BD</span></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="step2Upload" class="mb-6">
-                <h2 class="text-xl font-semibold text-gray-700 mb-3 text-center">2. Téléversez vos fichiers (Images ou PDF) :</h2>
-                <div class="flex flex-col items-center">
-                    <input type="file" id="fileUpload" accept="image/*,application/pdf" multiple="" class="block w-full max-w-md text-sm text-gray-500
-                        file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold
-                        file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100
-                        mb-2 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <div class="my-2 text-sm text-gray-600">Format de sortie (si applicable) :
-                        <select id="outputFormatSelect" class="ml-2 p-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
-                            <option value="source">Comme source (PDF reste PDF, Image reste Image)</option>
-                            <option value="image/png">PNG</option>
-                            <option value="image/jpeg">JPEG</option>
-                            <option value="application/pdf">PDF (convertir tout en PDF)</option>
-                        </select>
-                    </div>
-                </div>
-            </section>
-            
-            <section id="step3Adjust" class="mb-6 text-center">
-                 <h2 class="text-xl font-semibold text-gray-700 mb-3">3. Ajustez la zone sur le 1er fichier et validez :</h2>
-                <button id="initiateProcessingButton" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-50" disabled="">
-                    Afficher 1er Fichier et Ajuster Zone
-                </button>
-                <div id="canvasContainer" class="relative flex flex-col items-center mt-4"> 
-                    <canvas id="imageCanvas" class="border border-gray-400 rounded-lg shadow-md max-w-full h-auto" style="display: none;"></canvas>
-                </div>
-                <div id="loader"></div>
-                <button id="applyAndDownloadButton" class="hidden mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition duration-150 ease-in-out">
-                    Appliquer à Tous et Télécharger
-                </button>
-            </section>
-        </main>
-        <footer class="mt-8 pt-4 border-t border-gray-200 flex justify-center">
-             <button id="resetAllButtonBottom" title="Réinitialiser tous les paramètres" class="p-2 text-gray-500 hover:text-blue-600 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-ccw">
-                    <path d="M3 2v6h6"></path>
-                    <path d="M3.31 15A9 9 0 0 0 20.7 7.5"></path>
-                    <path d="M21 22v-6h-6"></path>
-                    <path d="M20.7 9A9 9 0 0 0 3.31 16.5"></path>
-                </svg>
-            </button>
-        </footer>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<title>EasyHide - Masqueur de pubs pour bordereaux</title>
+<!--
+  EasyHide - Derniere mise a jour : 14 novembre 2026
+  https://github.com/anonymousxptdr360/EasyHide
+  Version 100% hors-ligne : collez pdf.min.js et pdf.worker.min.js (v3.11.174)
+  dans les emplacements /*PDFJS_LIB*/ et /*PDFJS_WORKER*/ ci-dessous, ou utilisez
+  le script Python fourni dans la conversation. Les images fonctionnent deja sans connexion.
+  AVIF : encode via WebCodecs (AV1), 100% hors-ligne (Chrome, Brave, Edge).
+-->
+<style>
+:root{
+  --bg:#eef2f7;--card:#ffffff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;
+  --brand:#2563eb;--brand-d:#1d4ed8;--ok:#16a34a;--ok-bg:#f0fdf4;--ok-line:#bbf7d0;
+  --ok-ink:#166534;--warn:#b45309;--warn-bg:#fffbeb;--warn-line:#fde68a;
+  --info-bg:#eff6ff;--info-line:#bfdbfe;--info-ink:#1e40af;
+  --r:14px;--sh:0 6px 24px rgba(15,23,42,.08);
+}
+html{color-scheme:light;-webkit-text-size-adjust:100%}
+html[data-theme="dark"]{
+  color-scheme:dark;--bg:#0b1220;--card:#121b2e;--ink:#e2e8f0;--muted:#94a3b8;--line:#26344e;
+  --brand:#3b82f6;--brand-d:#2563eb;--ok:#22c55e;--ok-bg:#06281a;--ok-line:#14532d;
+  --ok-ink:#86efac;--warn:#fbbf24;--warn-bg:#2a1e04;--warn-line:#713f12;
+  --info-bg:#0c1f3f;--info-line:#1e3a8a;--info-ink:#93c5fd;--sh:0 6px 24px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;overscroll-behavior-y:contain}
+a{color:var(--brand)}
+.wrap{max-width:860px;margin:0 auto;padding:12px 14px 40px}
+.topstrip{background:#0f172a;text-align:center;padding:8px 12px;font-size:14px}
+html[data-theme="dark"] .topstrip{background:#000}
+.topstrip a{color:#fff;text-decoration:none;font-weight:600}
+.topstrip a:hover{text-decoration:underline}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px;margin-top:14px}
+h1{font-size:1.45rem;margin:0}
+h2{font-size:1.05rem;margin:0 0 10px;color:var(--ink)}
+.sub{color:var(--muted);margin:4px 0 0;font-size:.92rem}
+.headrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.logo{width:42px;height:42px;flex:none;border-radius:12px;background:var(--brand);display:flex;align-items:center;justify-content:center;color:#fff}
+.badge{display:inline-block;background:var(--info-bg);color:var(--info-ink);border:1px solid var(--info-line);border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:600}
+.badge.green{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
+.badge.gray{background:var(--bg);color:var(--muted);border-color:var(--line)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border-radius:10px;border:1px solid transparent;font-size:.95rem;font-weight:600;cursor:pointer;text-decoration:none;background:var(--brand);color:#fff;transition:background .15s,transform .05s}
+.btn:hover{background:var(--brand-d)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{background:var(--bg)}
+.btn.dark{background:#0f172a;color:#fff}
+.btn.dark:hover{background:#1e293b}
+html[data-theme="dark"] .btn.dark{background:#1e293b}
+.btn.ok{background:var(--ok)}
+.btn.ok:hover{background:#15803d}
+.btn.danger{background:#dc2626}
+.btn.danger:hover{background:#b91c1c}
+.btn.sm{min-height:38px;padding:6px 12px;font-size:.85rem}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.iconbtn{width:44px;height:44px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:1.15rem;font-weight:700;cursor:pointer}
+.iconbtn:hover{background:var(--bg)}
+.iconbtn:disabled{opacity:.4;cursor:not-allowed}
+.iconbtn.active{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.langs{display:flex;gap:6px;margin-left:auto}
+.flag{width:42px;height:32px;padding:3px;border-radius:8px;border:2px solid transparent;background:var(--card);cursor:pointer;display:flex;align-items:center}
+.flag svg{width:100%;height:100%;border-radius:3px;display:block}
+.flag[aria-pressed="true"]{border-color:var(--brand)}
+.privacy{background:var(--ok-bg);border:1px solid var(--ok-line);border-left:6px solid var(--ok);border-radius:var(--r);padding:14px 16px;margin-top:14px}
+.privacy .ptitle{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ok);font-size:1rem;margin-bottom:4px}
+.privacy p{margin:4px 0;font-size:.9rem;color:var(--ok-ink)}
+.privacy details{margin-top:8px;font-size:.85rem;color:var(--ok-ink)}
+.privacy summary{cursor:pointer;font-weight:600}
+.privacy ul{margin:8px 0 4px;padding-left:20px}
+.privacy li{margin:4px 0}
+.privacy.inline{margin-top:12px}
+.drop{border:2px dashed #94a3b8;border-radius:var(--r);padding:22px 14px;text-align:center;cursor:pointer;background:var(--bg);transition:background .15s,border-color .15s}
+.drop:hover,.drop.over{background:var(--info-bg);border-color:var(--brand)}
+.drop p{margin:4px 0}
+.drop .big{font-weight:600}
+.drop .small{font-size:.8rem;color:var(--muted)}
+#fileInput{display:none}
+.filelist{font-size:.85rem;color:var(--muted);margin-top:8px;word-break:break-all}
+.seg{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+.seg button{flex:1;min-width:150px;min-height:44px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:600;font-size:.88rem;cursor:pointer}
+.seg button.active{border-color:var(--brand);background:var(--info-bg);color:var(--info-ink)}
+.pagehint{font-size:.8rem;color:var(--muted);margin:4px 0 10px}
+.presets{display:flex;gap:22px;justify-content:center;flex-wrap:wrap;margin:6px 0 12px}
+.preset{text-align:center;font-size:.78rem;color:var(--muted)}
+.paper{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;border:2px solid #475569;border-radius:4px;background:#475569;margin:4px auto 0;cursor:pointer}
+.paper.p{width:64px;height:90px}
+.paper.l{width:90px;height:64px}
+.paper div{background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#64748b}
+html[data-theme="dark"] .paper div{background:#1e293b;color:#94a3b8}
+.paper div:hover{background:var(--info-line)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin:10px 0}
+.toolbar .sep{width:1px;height:28px;background:var(--line);margin:0 2px}
+#cropBar{display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:10px;padding:10px;margin:8px 0;font-size:.85rem;color:var(--ok-ink);font-weight:600}
+.cropfmt{display:inline-flex;border:1px solid var(--ok-line);border-radius:999px;overflow:hidden;background:var(--card)}
+.cropfmt button{border:none;background:transparent;color:var(--muted);font:inherit;font-weight:600;font-size:.8rem;padding:7px 13px;min-height:36px;cursor:pointer;white-space:nowrap}
+.cropfmt button.active{background:var(--ok);color:#fff}
+.crophint{flex-basis:100%;text-align:center;font-weight:500;font-size:.78rem;color:var(--ok-ink);opacity:.92;line-height:1.35}
+#stageOuter{overflow:auto;max-height:68vh;border:1px solid var(--line);border-radius:10px;background:var(--bg);display:none;-webkit-overflow-scrolling:touch}
+#stageInner{position:relative;display:inline-block;line-height:0;touch-action:none}
+#cv{display:block;max-width:none}
+.handle{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:var(--brand);border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);display:none;z-index:5;touch-action:none}
+.handle.crop{background:var(--ok)}
+.handle[data-h="tl"],.handle[data-h="br"]{cursor:nwse-resize}
+.handle[data-h="tr"],.handle[data-h="bl"]{cursor:nesw-resize}
+.handle[data-h="t"],.handle[data-h="b"]{cursor:ns-resize}
+.handle[data-h="l"],.handle[data-h="r"]{cursor:ew-resize}
+.hint{font-size:.82rem;color:var(--muted);text-align:center;margin:8px 0 0}
+.placeholder{padding:26px;text-align:center;color:var(--muted);font-size:.9rem;border:1px dashed var(--line);border-radius:10px;background:var(--bg)}
+.opt{margin:12px 0}
+.opt>label,.opt>.lbl{display:block;font-weight:600;font-size:.9rem;margin-bottom:6px}
+select,input[type=range]{width:100%;max-width:420px}
+select{min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:.95rem;color:var(--ink)}
+.radio{display:flex;gap:10px;flex-wrap:wrap}
+.radio label{flex:1;min-width:230px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font-size:.88rem;background:var(--card)}
+.radio label:has(input:checked){border-color:var(--brand);background:var(--info-bg)}
+.radio input{margin-right:6px}
+.radio .d{display:block;color:var(--muted);font-size:.78rem;margin-top:2px}
+.info{background:var(--info-bg);border:1px solid var(--info-line);border-radius:10px;padding:10px 12px;font-size:.83rem;color:var(--info-ink);margin-top:10px}
+.info.warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn)}
+.rangeline{display:flex;align-items:center;gap:10px}
+.rangeline output{font-weight:700;font-size:.9rem;min-width:46px}
+#progress{display:none;align-items:center;gap:10px;margin-top:12px;font-size:.9rem;color:var(--muted)}
+.spin{width:22px;height:22px;flex:none;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#results{display:none}
+.resrow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:.87rem;flex-wrap:wrap}
+.resrow .nm{flex:1;min-width:150px;word-break:break-all;font-weight:600}
+.resrow .sz{color:var(--muted);font-size:.8rem}
+.resrow.err .nm{color:#dc2626}
+.steps{margin:8px 0 0;padding-left:22px;font-size:.9rem}
+.steps li{margin:7px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+footer{margin-top:22px;text-align:center;font-size:.8rem;color:var(--muted)}
+footer a{color:var(--muted)}
+footer .fl{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:92vw;background:#0f172a;color:#fff;padding:11px 18px;border-radius:10px;font-size:.88rem;box-shadow:0 8px 30px rgba(0,0,0,.3);display:none;z-index:99;text-align:center}
+html[data-theme="dark"] #toast{background:#334155}
+#toast.ok{background:var(--ok)}#toast.err{background:#dc2626}#toast.warn{background:var(--warn)}
+#colorInput{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.gh{width:20px;height:20px;fill:currentColor;flex:none}
+#pageNav{position:fixed;left:50%;transform:translateX(-50%);bottom:74px;z-index:60;display:none;align-items:center;gap:4px;padding:6px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line);box-shadow:0 8px 30px rgba(0,0,0,.25)}
+#pageNav .navb{width:40px;height:40px;flex:none;border:none;border-radius:50%;background:transparent;color:var(--ink);font-size:1rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+#pageNav .navb:hover{background:var(--bg)}
+#pageNav .navb:disabled{opacity:.35;cursor:not-allowed}
+#pageSel{width:auto;max-width:none;min-width:78px;min-height:40px;height:40px;font-weight:700;text-align:center;border-radius:999px;padding:4px 8px;font-size:.9rem}
+#navGrip{cursor:grab;touch-action:none;color:var(--muted);font-size:1.1rem;padding:0 6px;user-select:none;-webkit-user-select:none}
+#navGrip:active{cursor:grabbing}
+@media (max-width:640px){
+  .wrap{padding:8px 8px 34px}.card{padding:14px}h1{font-size:1.2rem}.grid2{grid-template-columns:1fr}
+  .btnrow .btn{flex:1}.radio label{min-width:100%}#stageOuter{max-height:56vh}#pageNav{bottom:66px}
+  .cropfmt button{padding:7px 10px;font-size:.76rem}
+}
+</style>
+</head>
+<body>
+<script type="text/plain" id="pdfjs-lib-inline">/*PDFJS_LIB*/</script>
+<script type="text/plain" id="pdfjs-worker-inline">/*PDFJS_WORKER*/</script>
+<div class="topstrip">🌐 <a href="https://stopbordo.odoo.com/" target="_blank" rel="noopener noreferrer">stopbordo.odoo.com</a></div>
+<div class="wrap">
+  <div class="card">
+    <div class="headrow">
+      <div class="logo" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>
+      <div style="flex:1;min-width:170px"><h1>EasyHide</h1><p class="sub" data-i18n="subtitle">Masquez les pubs de vos bordereaux, en lot, sans rien envoyer.</p></div>
+      <div class="langs" role="group" aria-label="Language / Langue">
+        <button type="button" class="flag" id="flagFr" aria-pressed="true" title="Français"><svg viewBox="0 0 3 2" aria-hidden="true"><rect width="1" height="2" fill="#0055A4"/><rect x="1" width="1" height="2" fill="#FFFFFF"/><rect x="2" width="1" height="2" fill="#EF4135"/></svg></button>
+        <button type="button" class="flag" id="flagEn" aria-pressed="false" title="English"><svg viewBox="0 0 60 30" aria-hidden="true"><rect width="60" height="30" fill="#012169"/><path d="M0,0 60,30 M60,0 0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 60,30 M60,0 0,30" stroke="#C8102E" stroke-width="2"/><rect x="25" width="10" height="30" fill="#fff"/><rect y="10" width="60" height="10" fill="#fff"/><rect x="27" width="6" height="30" fill="#C8102E"/><rect y="12" width="60" height="6" fill="#C8102E"/></svg></button>
+      </div>
     </div>
+    <div class="btnrow">
+      <a class="btn dark" href="https://github.com/anonymousxptdr360/EasyHide/releases" target="_blank" rel="noopener noreferrer"><svg class="gh" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span data-i18n="downloadBtn">Télécharger le .html (hors connexion)</span></a>
+      <a class="btn ghost" href="https://github.com/anonymousxptdr360/EasyHide" target="_blank" rel="noopener noreferrer"><svg class="gh" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span data-i18n="repoBtn">Voir sur GitHub</span></a>
+      <button type="button" class="iconbtn" id="themeBtn" data-i18n-title="themeTitle" title="Mode sombre / clair">🌙</button>
+      <button type="button" class="iconbtn" id="resetTop" data-i18n-title="resetTitle" title="Tout réinitialiser">↺</button>
+    </div>
+    <p style="margin:12px 0 0"><span class="badge" data-i18n="updated">Dernière mise à jour : 14 novembre 2026</span> <span class="badge gray" id="pdfStatus"></span></p>
+  </div>
+  <div class="privacy">
+    <div class="ptitle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span data-i18n="privacyTitle">Confidentialité totale, par conception</span></div>
+    <p data-i18n="privacyText">Vos bordereaux ne quittent JAMAIS votre appareil : tout est traité localement dans votre navigateur. Aucun téléversement, aucun serveur, aucun compte, aucun pistage.</p>
+    <details>
+      <summary data-i18n="privacyMore">En savoir plus sur la confidentialité</summary>
+      <ul>
+        <li data-i18n="priv1">Vos fichiers restent en mémoire vive et disparaissent à la fermeture de l'onglet. Rien n'est enregistré sur un disque distant.</li>
+        <li data-i18n="priv2">Aucun cookie, aucune analytics, aucune publicité dans cet outil (c'est le but !).</li>
+        <li data-i18n="priv3">Seul stockage local : votre langue, votre thème, et le composant de lecture des PDF (du code, jamais vos documents) pour fonctionner hors connexion ensuite.</li>
+        <li data-i18n="priv4">Mode « Simple » : le texte sous les rectangles reste présent dans le PDF (sélectionnable). Pour des données sensibles à rendre irrécupérables, choisissez le mode « Sécurisé ».</li>
+        <li data-i18n="priv5">Les liens externes (GitHub, Reddit, BentoPDF, stopbordo.odoo.com) s'ouvrent dans un nouvel onglet : c'est la seule façon de quitter cet outil.</li>
+        <li data-i18n="priv6">Le code est public et vérifiable sur GitHub - téléchargez-le et utilisez-le sans connexion.</li>
+      </ul>
+    </details>
+  </div>
+  <div class="card">
+    <h2 data-i18n="step1Title">1. Ajoutez vos fichiers (images ou PDF, en lot)</h2>
+    <div class="drop" id="drop" role="button" tabindex="0"><p class="big" data-i18n="dropText">Cliquez ou glissez-déposez vos bordereaux ici</p><p class="small" data-i18n="dropHint">PDF, JPG, PNG, WebP… - plusieurs fichiers acceptés. Ils restent sur votre appareil.</p></div>
+    <input type="file" id="fileInput" accept="image/*,application/pdf,.pdf" multiple>
+    <div class="filelist" id="fileList"></div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="step2Title">2. Ajustez les zones sur le 1er fichier</h2>
+    <div id="pageModeWrap" style="display:none">
+      <span class="lbl" style="font-weight:600;font-size:.9rem" data-i18n="pageModeLabel">PDF multi-pages :</span>
+      <div class="seg"><button type="button" id="pageModeAll" class="active" data-i18n="pageAll">Toutes les pages (auto, rapide)</button><button type="button" id="pageModeManual" data-i18n="pageManual">Choisir page par page</button></div>
+      <p class="pagehint" id="pageModeHint"></p>
+    </div>
+    <div class="presets">
+      <div class="preset"><span data-i18n="portrait">Portrait</span><div class="paper p"><div data-q="0">↖</div><div data-q="1">↗</div><div data-q="2">↙</div><div data-q="3">↘</div></div></div>
+      <div class="preset"><span data-i18n="landscape">Paysage</span><div class="paper l"><div data-q="0">↖</div><div data-q="1">↗</div><div data-q="2">↙</div><div data-q="3">↘</div></div></div>
+    </div>
+    <div class="toolbar">
+      <button type="button" class="iconbtn" id="addRect" data-i18n-title="addTitle" title="Ajouter un rectangle blanc (au centre de la vue)">+</button>
+      <button type="button" class="iconbtn" id="delRect" data-i18n-title="delTitle" title="Supprimer le rectangle sélectionné">−</button>
+      <button type="button" class="iconbtn" id="colorBtn" data-i18n-title="colorTitle" title="Couleur du rectangle sélectionné">🎨</button>
+      <button type="button" class="iconbtn" id="cropBtn" data-i18n-title="cropTitle" title="Rogner">✂️</button>
+      <span class="sep"></span>
+      <button type="button" class="iconbtn" id="zoomOut" data-i18n-title="zoomOutTitle" title="Zoom arrière">🔍−</button>
+      <button type="button" class="iconbtn" id="zoomIn" data-i18n-title="zoomInTitle" title="Zoom avant">🔍+</button>
+      <button type="button" class="iconbtn" id="zoomFit" data-i18n-title="zoomFitTitle" title="Ajuster à l'écran">⤢</button>
+    </div>
+    <div id="cropBar">
+      <span id="cropBarText"></span>
+      <button type="button" class="btn sm ghost" id="cropAdjustBtn">Ajuster</button>
+      <button type="button" class="btn sm danger" id="cropRemoveBtn" data-i18n="cropDelete">Supprimer le rognage</button>
+      <div class="cropfmt" role="group" aria-label="Format de la page rognée">
+        <button type="button" id="cropFmtCrop" class="active" data-i18n="cropFmtCrop">Format rogné</button>
+        <button type="button" id="cropFmtA4" data-i18n="cropFmtA4">A4 conservé</button>
+      </div>
+      <span class="crophint" id="cropFmtHint"></span>
+      <div class="cropfmt" id="a4OrientGroup" role="group" aria-label="Orientation A4">
+        <button type="button" id="a4OrientSrc" class="active">1re page</button>
+        <button type="button" id="a4OrientAuto" data-i18n="a4OrientAuto">Auto par rognage</button>
+      </div>
+      <span class="crophint" id="a4OrientHint"></span>
+    </div>
+    <input type="color" id="colorInput" value="#ffffff" aria-hidden="true" tabindex="-1">
+    <div class="placeholder" id="editorPlaceholder" data-i18n="editorPlaceholder">L'aperçu du premier fichier apparaîtra ici.</div>
+    <div id="stageOuter"><div id="stageInner">
+      <canvas id="cv"></canvas>
+      <div class="handle" data-h="tl"></div><div class="handle" data-h="t"></div><div class="handle" data-h="tr"></div>
+      <div class="handle" data-h="l"></div><div class="handle" data-h="r"></div>
+      <div class="handle" data-h="bl"></div><div class="handle" data-h="b"></div><div class="handle" data-h="br"></div>
+    </div></div>
+    <p class="hint" id="editorHint" data-i18n="editorHint">Touchez un rectangle pour le sélectionner, glissez pour le déplacer, tirez les poignées pour le redimensionner. Glissez sur une zone vide pour dessiner un nouveau rectangle. Aucun rectangle ? L'outil fait alors une simple conversion.</p>
+  </div>
+  <div class="card">
+    <h2 data-i18n="step3Title">3. Choisissez le rendu, puis appliquez à tous</h2>
+    <p class="sub" data-i18n="convertNote">Astuce : les rectangles sont optionnels. Sans rectangle, EasyHide devient un convertisseur de format tout-en-un.</p>
+    <div class="opt" id="modeWrap">
+      <span class="lbl" data-i18n="modeLabel">Mode de masquage (PDF)</span>
+      <div class="radio">
+        <label><input type="radio" name="mode" value="simple" checked><strong data-i18n="modeSimple">Simple - texte sélectionnable (recommandé)</strong><span class="d" data-i18n="modeSimpleDesc">Rectangles ajoutés par-dessus le PDF d'origine. Qualité parfaite, fichier quasi aussi léger que l'original.</span></label>
+        <label><input type="radio" name="mode" value="secure"><strong data-i18n="modeSecure">Sécurisé - irrécupérable</strong><span class="d" data-i18n="modeSecureDesc">Pages converties en image : plus rien n'est sélectionnable. Plus lourd, poids contrôlé par la qualité et les DPI.</span></label>
+      </div>
+    </div>
+    <div class="opt">
+      <label for="fmt" data-i18n="fmtLabel">Format de sortie</label>
+      <select id="fmt">
+        <option value="pdf" data-i18n="fmtPdf">PDF (recommandé - qualité maximale)</option>
+        <option value="image/png" data-i18n="fmtPng">PNG - image sans perte (lourd)</option>
+        <option value="image/jpeg" data-i18n="fmtJpeg">JPG - image légère (partage)</option>
+        <option value="image/webp" data-i18n="fmtWebp">WebP - moderne, très léger</option>
+        <option value="image/avif" data-i18n="fmtAvif">AVIF - le plus léger</option>
+        <option value="image/gif" data-i18n="fmtGif">GIF - 256 couleurs, compatible partout</option>
+      </select>
+    </div>
+    <div class="opt" id="qualityWrap" style="display:none">
+      <label for="quality" data-i18n="qualityLabel">Qualité de compression</label>
+      <div class="rangeline"><input type="range" id="quality" min="1" max="100" value="85" step="1"><output id="qualityOut">85 %</output></div>
+    </div>
+    <div class="opt" id="dpiWrap" style="display:none">
+      <label for="dpi" data-i18n="dpiLabel">Résolution (DPI) - pages PDF converties en image</label>
+      <select id="dpi"><option value="150">150 DPI</option><option value="200" selected>200 DPI</option><option value="300">300 DPI</option></select>
+    </div>
+    <div class="info" id="fmtHint"></div>
+    <div class="btnrow"><button type="button" class="btn ok" id="applyBtn" disabled><span data-i18n="applyBtn">Appliquer à tous et préparer les téléchargements</span></button></div>
+    <div id="progress" aria-live="polite"><div class="spin"></div><span id="progressText"></span></div>
+  </div>
+  <div class="card" id="results">
+    <h2 data-i18n="resultTitle">Vos fichiers prêts</h2>
+    <div id="resultList"></div>
+    <div class="btnrow"><button type="button" class="btn" id="zipBtn" data-i18n="zipBtn">Tout télécharger (.zip)</button></div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="fallbackTitle">🛟 Roue de secours : BentoPDF (en ligne)</h2>
+    <p class="sub" data-i18n="fallbackIntro">Si EasyHide ne convient pas, voici la méthode précise sur BentoPDF. Une connexion est nécessaire pour charger la page, puis tout se passe dans votre navigateur.</p>
+    <div class="privacy inline">
+      <div class="ptitle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span data-i18n="bentoPrivTitle">BentoPDF est confidentiel lui aussi</span></div>
+      <p data-i18n="bentoPrivText">Votre document ne quitte JAMAIS votre appareil : BentoPDF exécute un moteur PDF (PDFium compilé en WebAssembly) directement dans votre navigateur. Seul le code de la page est téléchargé, jamais vos fichiers. C'est confirmé explicitement dans leur FAQ (« le document lui-même ne quitte jamais votre appareil »).</p>
+    </div>
+    <ol class="steps">
+      <li data-i18n="fb1">Ouvrez ce lien précis (l'éditeur PDF) : www.bentopdf.com/fr/edit-pdf</li>
+      <li data-i18n="fb2">Ajoutez votre fichier - ⚠️ ce service n'accepte que les PDF.</li>
+      <li data-i18n="fb3">Allez dans « Shapes » (les formes).</li>
+      <li data-i18n="fb4">Cliquez sur le carré, puis cliquez sur la palette de couleurs située juste à gauche de la flèche qui pointe vers la gauche, et choisissez blanc.</li>
+      <li data-i18n="fb5">Placez et redimensionnez le carré sur la pub, puis exportez votre PDF.</li>
+    </ol>
+    <div class="btnrow"><a class="btn ghost" href="https://www.bentopdf.com/fr/edit-pdf" target="_blank" rel="noopener noreferrer" data-i18n="fallbackBtn">Ouvrir l'éditeur BentoPDF ↗</a></div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="examplesTitle">👀 Voir des bordereaux avec des pubs</h2>
+    <p class="sub" data-i18n="examplesText">Curieux de voir à quoi ressemblent les bordereaux qui contiennent des publicités (avant masquage) ? Des exemples sont visibles sur Reddit (r/vinted_france).</p>
+    <div class="btnrow"><a class="btn ghost" href="https://www.reddit.com/r/vinted_france/comments/1l0kuc1/jai_fait_un_site_non_lucratif_pour_enlever/" target="_blank" rel="noopener noreferrer" data-i18n="examplesBtn">Voir les exemples sur Reddit ↗</a></div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="quadrantTitle">📦 Petits colis ? Bordereau au quart de page</h2>
+    <p class="sub" data-i18n="quadrantText">Pour les petits colis, générez des bordereaux compacts : 4 bordereaux sur une seule feuille A4. Moins de papier, moins d'encre, et des étiquettes à la bonne taille.</p>
+    <div class="btnrow"><a class="btn ghost" href="https://anonymousxptdr360.github.io/a4-quadrant-slip-generator/v2.html" target="_blank" rel="noopener noreferrer" data-i18n="quadrantBtn">Ouvrir le générateur quart de page ↗</a></div>
+  </div>
+  <div class="card">
+    <h2 data-i18n="supportTitle">🐞 Un problème ? Une idée ?</h2>
+    <div class="grid2">
+      <div><p class="sub" data-i18n="issuesText">Avec un compte GitHub : ouvrez un ticket (bugs, suggestions).</p><div class="btnrow"><a class="btn dark" href="https://github.com/anonymousxptdr360/EasyHide/issues" target="_blank" rel="noopener noreferrer"><svg class="gh" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span data-i18n="issuesBtn">Ouvrir un ticket ↗</span></a></div></div>
+      <div><p class="sub" data-i18n="contactText">Sans compte GitHub : contactez-moi directement via le formulaire.</p><div class="btnrow"><a class="btn ghost" href="https://stopbordo.odoo.com/contactus" target="_blank" rel="noopener noreferrer" data-i18n="contactBtn">Me contacter ↗</a></div></div>
+    </div>
+  </div>
+  <footer>
+    <div class="fl">
+      <a href="https://stopbordo.odoo.com/" target="_blank" rel="noopener noreferrer">stopbordo.odoo.com</a>
+      <a href="https://github.com/anonymousxptdr360/EasyHide" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://github.com/anonymousxptdr360/EasyHide/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+      <a href="https://github.com/anonymousxptdr360/EasyHide/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+      <a href="https://anonymousxptdr360.github.io/a4-quadrant-slip-generator/v2.html" target="_blank" rel="noopener noreferrer" data-i18n="quadrantShort">Quart de page</a>
+      <a href="https://stopbordo.odoo.com/contactus" target="_blank" rel="noopener noreferrer">Contact</a>
+    </div>
+    <p><span data-i18n="updated">Dernière mise à jour : 14 novembre 2026</span> · <span data-i18n="footerNote">Outil gratuit et non lucratif - vos fichiers restent chez vous.</span></p>
+    <button type="button" class="iconbtn" id="resetBottom" data-i18n-title="resetTitle" title="Tout réinitialiser" style="margin:6px auto 0">↺</button>
+  </footer>
+</div>
+<div id="pageNav">
+  <span id="navGrip" data-i18n-title="navGripTitle" title="Glisser pour déplacer la barre">⠿</span>
+  <button type="button" class="navb" id="navFirst" data-i18n-title="navFirstTitle" title="Première page">⏮</button>
+  <button type="button" class="navb" id="navPrev" data-i18n-title="navPrevTitle" title="Page précédente">◀</button>
+  <select id="pageSel" data-i18n-title="navGotoTitle" title="Choisir la page"></select>
+  <button type="button" class="navb" id="navNext" data-i18n-title="navNextTitle" title="Page suivante">▶</button>
+  <button type="button" class="navb" id="navLast" data-i18n-title="navLastTitle" title="Dernière page">⏭</button>
+  <button type="button" class="navb" id="navCopy" data-i18n-title="navCopyTitle" title="Copier les rectangles et le rognage de cette page vers toutes les pages">⧉</button>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<noscript><p style="text-align:center;padding:20px">EasyHide a besoin de JavaScript (tout s'exécute localement).</p></noscript>
+<script>
+"use strict";
+/* ===== 1. i18n FR / EN ===== */
+const I18N={
+fr:{
+ subtitle:"Masquez les pubs de vos bordereaux, en lot, sans rien envoyer.",
+ downloadBtn:"Télécharger le .html (hors connexion)",repoBtn:"Voir sur GitHub",
+ updated:"Dernière mise à jour : 14 novembre 2026",themeTitle:"Mode sombre / clair",
+ privacyTitle:"Confidentialité totale, par conception",
+ privacyText:"Vos bordereaux ne quittent JAMAIS votre appareil : tout est traité localement dans votre navigateur. Aucun téléversement, aucun serveur, aucun compte, aucun pistage.",
+ privacyMore:"En savoir plus sur la confidentialité",
+ priv1:"Vos fichiers restent en mémoire vive et disparaissent à la fermeture de l'onglet. Rien n'est enregistré sur un disque distant.",
+ priv2:"Aucun cookie, aucune analytics, aucune publicité dans cet outil (c'est le but !).",
+ priv3:"Seul stockage local : votre langue, votre thème, et le composant de lecture des PDF (du code, jamais vos documents) pour fonctionner hors connexion ensuite.",
+ priv4:"Mode « Simple » : le texte sous les rectangles reste présent dans le PDF (sélectionnable). Pour des données sensibles à rendre irrécupérables, choisissez le mode « Sécurisé ».",
+ priv5:"Les liens externes (GitHub, Reddit, BentoPDF, stopbordo.odoo.com) s'ouvrent dans un nouvel onglet : c'est la seule façon de quitter cet outil.",
+ priv6:"Le code est public et vérifiable sur GitHub - téléchargez-le et utilisez-le sans connexion.",
+ step1Title:"1. Ajoutez vos fichiers (images ou PDF, en lot)",
+ dropText:"Cliquez ou glissez-déposez vos bordereaux ici",
+ dropHint:"PDF, JPG, PNG, WebP… - plusieurs fichiers acceptés. Ils restent sur votre appareil.",
+ filesNone:"Aucun fichier pour l'instant.",filesCount:"{n} fichier(s) : {names}",
+ step2Title:"2. Ajustez les zones sur le 1er fichier",
+ pageModeLabel:"PDF multi-pages :",pageAll:"Toutes les pages (auto, rapide)",pageManual:"Choisir page par page",
+ pageHintAll:"Les mêmes rectangles (et le même rognage) sont appliqués automatiquement à chaque page de chaque PDF. Un seul réglage, tout est traité d'un coup.",
+ pageHintManual:"Vous décidez page par page : naviguez avec la barre flottante (déplaçable avec ⠿), ajoutez ou non des rectangles et un rognage sur chaque page. Les réglages s'appliquent ensuite au même numéro de page dans tous les fichiers du lot (les pages sans réglage restent intactes).",
+ portrait:"Portrait",landscape:"Paysage",
+ addTitle:"Ajouter un rectangle blanc (au centre de la vue actuelle)",delTitle:"Supprimer le rectangle sélectionné",
+ colorTitle:"Couleur : sélectionnez un rectangle puis cliquez ici",
+ cropTitle:"Rogner : découper le document (ne garder qu'une zone)",
+ cropRemoveTitle:"Supprimer le rognage",
+ cropHint:"Mode rognage : ajustez le cadre vert (tout ce qui est à l'extérieur sera coupé). En mode « page par page », le rognage ne concerne que la page affichée. Choisissez ci-dessous le format et l'orientation de la page. « Supprimer le rognage » l'enlève complètement ; Échap termine l'ajustement.",
+ cropAdded:"Rognage activé : ajustez le cadre vert.",cropRemoved:"Rognage supprimé.",
+ cropBannerAll:"✂️ Rognage actif - toutes les pages",
+ cropBannerPage:"✂️ Rognage actif - page {n} uniquement",
+ cropAdjust:"Ajuster",cropAdjustDone:"Terminer",cropDelete:"Supprimer le rognage",
+ cropFmtCrop:"Format rogné",cropFmtA4:"A4 conservé",
+ cropFmtHintCrop:"La page prend exactement la taille de la zone rognée (aucune marge ajoutée).",
+ cropFmtHintA4:"La page reste en A4 : la zone rognée est ajustée et centrée, avec des marges blanches. Pratique pour imprimer sur du A4 standard.",
+ cropToastCrop:"Rognage : la page prendra le format rogné.",cropToastA4:"Rognage : la page restera en A4 (contenu centré).",
+ a4OrientSrc:"Orientation 1re page",a4OrientAuto:"Auto par rognage",
+ a4OrientHintSrc:"Orientation A4 : celle de la 1re page du document (indiquée entre parenthèses). TOUTES les pages rognées gardent cette même orientation, même si un rognage est large : un rognage large sur une page portrait donnera de grandes marges en haut et en bas. C'est le réglage recommandé pour un document cohérent.",
+ a4OrientHintAuto:"Orientation A4 : chaque rognage choisit la sienne (ancien comportement). Un rognage plus large que haut devient une page A4 PAYSAGE, un rognage plus haut que large devient PORTRAIT. Le document peut donc alterner portrait et paysage d'une page à l'autre. À choisir si vous préférez remplir la feuille au maximum.",
+ a4OrientToastSrc:"Orientation A4 : celle de la 1re page, pour toutes les pages.",
+ a4OrientToastAuto:"Orientation A4 : automatique, chaque rognage décide (peut alterner).",
+ zoomInTitle:"Zoom avant",zoomOutTitle:"Zoom arrière",zoomFitTitle:"Ajuster à l'écran",
+ editorPlaceholder:"L'aperçu du premier fichier apparaîtra ici.",
+ editorHint:"Touchez un rectangle pour le sélectionner, glissez pour le déplacer, tirez les poignées pour le redimensionner. Glissez sur une zone vide pour dessiner un nouveau rectangle. Le bouton + place le rectangle au centre de ce que vous voyez. Aucun rectangle ? L'outil fait alors une simple conversion.",
+ navGripTitle:"Glisser pour déplacer la barre",navFirstTitle:"Première page",navPrevTitle:"Page précédente",
+ navNextTitle:"Page suivante",navLastTitle:"Dernière page",navGotoTitle:"Choisir la page",
+ navCopyTitle:"Copier les rectangles et le rognage de cette page vers toutes les pages",
+ copiedAll:"Rectangles et rognage de cette page copiés vers toutes les pages.",
+ step3Title:"3. Choisissez le rendu, puis appliquez à tous",
+ convertNote:"Astuce : les rectangles sont optionnels. Sans rectangle, EasyHide devient un convertisseur de format tout-en-un.",
+ modeLabel:"Mode de masquage (PDF)",
+ modeSimple:"Simple - texte sélectionnable (recommandé)",
+ modeSimpleDesc:"Rectangles ajoutés par-dessus le PDF d'origine. Qualité parfaite, fichier quasi aussi léger que l'original.",
+ modeSecure:"Sécurisé - irrécupérable",
+ modeSecureDesc:"Pages converties en image : plus rien n'est sélectionnable. Plus lourd, poids contrôlé par la qualité et les DPI.",
+ fmtLabel:"Format de sortie",fmtPdf:"PDF (recommandé - qualité maximale)",fmtPng:"PNG - image sans perte (lourd)",
+ fmtJpeg:"JPG - image légère (partage)",fmtWebp:"WebP - moderne, très léger",fmtAvif:"AVIF - le plus léger",
+ fmtGif:"GIF - 256 couleurs, compatible partout",unsupported:" (non supporté ici, bascule auto)",
+ qualityLabel:"Qualité de compression",dpiLabel:"Résolution (DPI) - pages PDF converties en image",
+ hintPdfSimple:"📄 PDF simple : votre PDF d'origine est conservé tel quel (texte vectoriel net et sélectionnable) avec des rectangles ajoutés par-dessus. Le fichier reste très léger (quelques centaines d'octets ajoutés par page). Sans rectangle, c'est une copie conforme. Le rognage (✂️) est aussi vectoriel, sans aucune perte : page au format rogné ou page A4 conservée avec contenu centré, orientation selon la 1re page ou automatique (par page en mode « page par page »). ⚠️ Le texte sous les rectangles est masqué mais toujours présent dans le fichier : pour un masquage irrécupérable (données sensibles), passez en mode « Sécurisé ». Les images sources, elles, sont toujours modifiées définitivement (pixels remplacés).",
+ hintPdfSecure:"🔒 PDF sécurisé : chaque page est convertie en image puis réassemblée en PDF. Plus aucun texte n'est sélectionnable ni récupérable : le masquage est définitif. Chaque rendu est vérifié : si une page sort avec une dominante de couleur anormale, elle est re-rendue depuis une copie fraîche du document et comparée (une page vraiment colorée n'est pas modifiée). Le poids dépend des DPI et de la qualité - 200 DPI / 85 % est un bon compromis netteté/légèreté.",
+ hintPdfFromImg:"📄 PDF : chaque image est placée sur une page A4. Le texte n'est pas sélectionnable (ce sont des images) et le masquage est définitif. La qualité et les DPI règlent le poids du fichier.",
+ hintPng:"🖼️ PNG : image sans aucune perte, netteté maximale, mais fichier volumineux. Texte non sélectionnable, masquage définitif. Les PDF multi-pages donnent une image par page.",
+ hintJpeg:"🖼️ JPG : image compressée, légère, idéale pour le partage. Netteté réglable avec la qualité (1 à 100 %). Masquage définitif, texte non sélectionnable.",
+ hintWebp:"🖼️ WebP : format moderne, très léger à qualité égale. Si votre navigateur ne sait pas le créer, bascule automatique (avec message). Masquage définitif.",
+ hintAvif:"🖼️ AVIF : compression la plus efficace, fichier minuscule. Encodé via WebCodecs (AV1), 100 % hors-ligne : fonctionne sur Chrome, Brave et Edge. Firefox et LibreWolf n'embarquent pas d'encodeur AV1 : sur ces navigateurs, bascule automatique en WebP (limite du navigateur, pas du site). Masquage définitif.",
+ hintGif:"🖼️ GIF : 256 couleurs maximum (encodeur intégré, 100 % hors-ligne). Parfait pour les bordereaux noir et blanc, compatible partout. Masquage définitif.",
+ applyBtn:"Appliquer à tous et préparer les téléchargements",
+ processing:"Traitement de {name} ({i}/{n})…",verifying:"Vérification du rendu ({i}/{n})…",
+ renderFixed:"{n} page(s) au rendu suspect ont été re-rendues et corrigées automatiquement.",
+ done:"{n} fichier(s) prêt(s). Téléchargez-les ci-dessous.",
+ doneNone:"Aucun fichier n'a pu être traité.",resultTitle:"Vos fichiers prêts",zipBtn:"Tout télécharger (.zip)",
+ download:"Télécharger",badgeSimple:"texte sélectionnable",badgeRaster:"image · non sélectionnable",
+ badgeCropped:"rogné",badgeCroppedA4:"rogné · A4",errFile:"Erreur : {msg}",
+ waitRender:"Patientez : une page est encore en cours d'affichage.",
+ fallbackTitle:"🛟 Roue de secours : BentoPDF (en ligne)",
+ fallbackIntro:"Si EasyHide ne convient pas, voici la méthode précise sur BentoPDF. Une connexion est nécessaire pour charger la page, puis tout se passe dans votre navigateur.",
+ bentoPrivTitle:"BentoPDF est confidentiel lui aussi",
+ bentoPrivText:"Votre document ne quitte JAMAIS votre appareil : BentoPDF exécute un moteur PDF (PDFium compilé en WebAssembly) directement dans votre navigateur. Seul le code de la page est téléchargé, jamais vos fichiers. C'est confirmé explicitement dans leur FAQ (« le document lui-même ne quitte jamais votre appareil »).",
+ fb1:"Ouvrez ce lien précis (l'éditeur PDF) : www.bentopdf.com/fr/edit-pdf",
+ fb2:"Ajoutez votre fichier - ⚠️ ce service n'accepte que les PDF.",
+ fb3:"Allez dans « Shapes » (les formes).",
+ fb4:"Cliquez sur le carré, puis cliquez sur la palette de couleurs située juste à gauche de la flèche qui pointe vers la gauche, et choisissez blanc.",
+ fb5:"Placez et redimensionnez le carré sur la pub, puis exportez votre PDF.",
+ fallbackBtn:"Ouvrir l'éditeur BentoPDF ↗",
+ examplesTitle:"👀 Voir des bordereaux avec des pubs",
+ examplesText:"Curieux de voir à quoi ressemblent les bordereaux qui contiennent des publicités (avant masquage) ? Des exemples sont visibles sur Reddit (r/vinted_france).",
+ examplesBtn:"Voir les exemples sur Reddit ↗",
+ quadrantTitle:"📦 Petits colis ? Bordereau au quart de page",
+ quadrantText:"Pour les petits colis, générez des bordereaux compacts : 4 bordereaux sur une seule feuille A4. Moins de papier, moins d'encre, et des étiquettes à la bonne taille.",
+ quadrantBtn:"Ouvrir le générateur quart de page ↗",quadrantShort:"Quart de page",
+ supportTitle:"🐞 Un problème ? Une idée ?",issuesText:"Avec un compte GitHub : ouvrez un ticket (bugs, suggestions).",
+ issuesBtn:"Ouvrir un ticket ↗",contactText:"Sans compte GitHub : contactez-moi directement via le formulaire.",contactBtn:"Me contacter ↗",
+ footerNote:"Outil gratuit et non lucratif - vos fichiers restent chez vous.",
+ resetTitle:"Tout réinitialiser",resetDone:"Tout a été réinitialisé.",needFiles:"Ajoutez d'abord des fichiers.",
+ selectForColor:"Touchez d'abord un rectangle, puis cliquez sur 🎨 pour changer sa couleur.",
+ rectAdded:"Rectangle blanc ajouté au centre de la vue.",rectRemoved:"Rectangle supprimé.",noRects:"Aucun rectangle à supprimer.",
+ errPdfBad:"Structure PDF non reconnue. Essayez le mode « Sécurisé ».",
+ errPdfEnc:"Ce PDF est protégé par mot de passe : impossible de le modifier.",
+ errPdfNoPages:"Pages du PDF introuvables. Essayez le mode « Sécurisé ».",
+ errImg:"Image illisible par ce navigateur (format non supporté ?).",errType:"Type de fichier non pris en charge.",
+ errPdfjs:"Le composant PDF n'est pas disponible hors connexion. Connectez-vous une fois pour le télécharger (il sera mis en cache), ou utilisez une capture d'écran du bordereau en image.",
+ pdfDl:"Téléchargement du composant PDF (une seule fois, ~1,4 Mo, du code uniquement - jamais vos fichiers)…",
+ pdfReady:"Composant PDF prêt : les PDF fonctionnent maintenant hors connexion.",
+ pdfStatusInline:"PDF : 100 % hors-ligne ✓",pdfStatusCached:"PDF : hors-ligne ✓ (en cache)",pdfStatusNone:"PDF : composant à télécharger une fois",
+ fellBack:"{from} non supporté par ce navigateur → export en {to}.",
+ bigImg:"Image très grande : réduite à 8000 px max pour préserver la mémoire.",
+ bigPage:"Page très grande : résolution de rendu limitée pour préserver la mémoire.",
+ zipName:"easyhide_resultats.zip",unitK:"Ko",unitM:"Mo"
+},
+en:{
+ subtitle:"Hide ads on your shipping labels, in batch, without uploading anything.",
+ downloadBtn:"Download the .html (offline)",repoBtn:"View on GitHub",
+ updated:"Last update: November 14, 2026",themeTitle:"Dark / light mode",
+ privacyTitle:"Total privacy, by design",
+ privacyText:"Your labels NEVER leave your device: everything is processed locally in your browser. No upload, no server, no account, no tracking.",
+ privacyMore:"Learn more about privacy",
+ priv1:"Your files stay in memory and vanish when you close the tab. Nothing is stored on any remote disk.",
+ priv2:"No cookies, no analytics, no ads in this tool (that's the point!).",
+ priv3:"Only local storage: your language, your theme, and the PDF reading component (code, never your documents) so it works offline afterwards.",
+ priv4:"“Simple” mode: text under the rectangles remains inside the PDF (selectable). For sensitive data that must be unrecoverable, use “Secure” mode.",
+ priv5:"External links (GitHub, Reddit, BentoPDF, stopbordo.odoo.com) open in a new tab: that's the only way out of this tool.",
+ priv6:"The code is public and auditable on GitHub - download it and use it offline.",
+ step1Title:"1. Add your files (images or PDF, batch)",
+ dropText:"Click or drag & drop your labels here",
+ dropHint:"PDF, JPG, PNG, WebP… - multiple files allowed. They stay on your device.",
+ filesNone:"No file yet.",filesCount:"{n} file(s): {names}",
+ step2Title:"2. Adjust the areas on the 1st file",
+ pageModeLabel:"Multi-page PDF:",pageAll:"All pages (auto, fast)",pageManual:"Choose page by page",
+ pageHintAll:"The same rectangles (and the same crop) are automatically applied to every page of every PDF. One setting, everything processed at once.",
+ pageHintManual:"You decide page by page: navigate with the floating bar (draggable with ⠿), add rectangles and a crop only where you want them. Settings then apply to the same page number in every file of the batch (pages without settings stay untouched).",
+ portrait:"Portrait",landscape:"Landscape",
+ addTitle:"Add a white rectangle (centered in the current view)",delTitle:"Delete the selected rectangle",
+ colorTitle:"Color: select a rectangle then click here",
+ cropTitle:"Crop: cut the document (keep only one area)",cropRemoveTitle:"Remove the crop",
+ cropHint:"Crop mode: adjust the green frame (everything outside will be cut). In “page by page” mode, the crop only applies to the displayed page. Choose the page format and orientation below. “Remove crop” deletes it completely; Esc finishes adjusting.",
+ cropAdded:"Crop enabled: adjust the green frame.",cropRemoved:"Crop removed.",
+ cropBannerAll:"✂️ Crop active - all pages",
+ cropBannerPage:"✂️ Crop active - page {n} only",
+ cropAdjust:"Adjust",cropAdjustDone:"Done",cropDelete:"Remove crop",
+ cropFmtCrop:"Cropped size",cropFmtA4:"Keep A4",
+ cropFmtHintCrop:"The page becomes exactly the size of the cropped area (no added margins).",
+ cropFmtHintA4:"The page stays A4: the cropped area is scaled to fit and centered with white margins. Handy for printing on standard A4.",
+ cropToastCrop:"Crop: the page will take the cropped size.",cropToastA4:"Crop: the page will stay A4 (centered content).",
+ a4OrientSrc:"1st page orientation",a4OrientAuto:"Auto per crop",
+ a4OrientHintSrc:"A4 orientation: the one from the document's first page (shown in brackets). ALL cropped pages keep that same orientation, even if a crop is wide: a wide crop on a portrait page will get large top and bottom margins. Recommended for a consistent document.",
+ a4OrientHintAuto:"A4 orientation: each crop picks its own (previous behaviour). A crop wider than tall becomes a LANDSCAPE A4 page, a crop taller than wide becomes PORTRAIT. The document may therefore alternate portrait and landscape between pages. Choose this if you prefer to fill the sheet as much as possible.",
+ a4OrientToastSrc:"A4 orientation: from the first page, for all pages.",
+ a4OrientToastAuto:"A4 orientation: automatic, each crop decides (may alternate).",
+ zoomInTitle:"Zoom in",zoomOutTitle:"Zoom out",zoomFitTitle:"Fit to screen",
+ editorPlaceholder:"The first file's preview will appear here.",
+ editorHint:"Tap a rectangle to select it, drag to move it, pull the handles to resize. Drag on an empty area to draw a new rectangle. The + button places the rectangle in the center of what you see. No rectangle? The tool then just converts the format.",
+ navGripTitle:"Drag to move the bar",navFirstTitle:"First page",navPrevTitle:"Previous page",
+ navNextTitle:"Next page",navLastTitle:"Last page",navGotoTitle:"Choose the page",
+ navCopyTitle:"Copy this page's rectangles and crop to all pages",copiedAll:"This page's rectangles and crop copied to all pages.",
+ step3Title:"3. Choose the output, then apply to all",
+ convertNote:"Tip: rectangles are optional. Without any, EasyHide becomes an all-in-one format converter.",
+ modeLabel:"Masking mode (PDF)",modeSimple:"Simple - selectable text (recommended)",
+ modeSimpleDesc:"Rectangles added on top of the original PDF. Perfect quality, file almost as light as the original.",
+ modeSecure:"Secure - unrecoverable",
+ modeSecureDesc:"Pages converted to images: nothing is selectable anymore. Heavier, size controlled by quality and DPI.",
+ fmtLabel:"Output format",fmtPdf:"PDF (recommended - best quality)",fmtPng:"PNG - lossless image (heavy)",
+ fmtJpeg:"JPG - light image (sharing)",fmtWebp:"WebP - modern, very light",fmtAvif:"AVIF - lightest",
+ fmtGif:"GIF - 256 colors, works everywhere",unsupported:" (not supported here, auto fallback)",
+ qualityLabel:"Compression quality",dpiLabel:"Resolution (DPI) - PDF pages converted to images",
+ hintPdfSimple:"📄 Simple PDF: your original PDF is kept as-is (crisp, selectable vector text) with rectangles added on top. The file stays very light (a few hundred bytes added per page). Without rectangles, it's an identical copy. Cropping (✂️) is vector too, with no quality loss: cropped-size page or kept A4 with centered content, orientation from the first page or automatic (per page in “page by page” mode). ⚠️ Text under the rectangles is covered but still present in the file: for unrecoverable masking (sensitive data), switch to “Secure” mode. Source images are always permanently modified (pixels replaced).",
+ hintPdfSecure:"🔒 Secure PDF: each page is converted to an image then rebuilt into a PDF. No text is selectable or recoverable: masking is permanent. Every render is verified: if a page comes out with an abnormal colour cast, it is re-rendered from a fresh copy of the document and compared (a genuinely coloured page is left untouched). Size depends on DPI and quality - 200 DPI / 85% is a good sharpness/size trade-off.",
+ hintPdfFromImg:"📄 PDF: each image is placed on an A4 page. Text is not selectable (these are images) and masking is permanent. Quality and DPI control the file size.",
+ hintPng:"🖼️ PNG: lossless image, maximum sharpness, but large file. Text not selectable, permanent masking. Multi-page PDFs yield one image per page.",
+ hintJpeg:"🖼️ JPG: compressed, light image, ideal for sharing. Sharpness adjustable with quality (1 to 100%). Permanent masking, text not selectable.",
+ hintWebp:"🖼️ WebP: modern format, very light at equal quality. If your browser can't create it, automatic fallback (with a message). Permanent masking.",
+ hintAvif:"🖼️ AVIF: most efficient compression, tiny file. Encoded via WebCodecs (AV1), 100% offline: works on Chrome, Brave and Edge. Firefox and LibreWolf ship no AV1 encoder: on those browsers, automatic fallback to WebP (a browser limitation, not the site's). Permanent masking.",
+ hintGif:"🖼️ GIF: 256 colors max (built-in encoder, 100% offline). Perfect for black-and-white labels, works everywhere. Permanent masking.",
+ applyBtn:"Apply to all and prepare downloads",processing:"Processing {name} ({i}/{n})…",
+ verifying:"Verifying render ({i}/{n})…",
+ renderFixed:"{n} page(s) with a suspicious render were re-rendered and fixed automatically.",
+ done:"{n} file(s) ready. Download them below.",doneNone:"No file could be processed.",
+ resultTitle:"Your files are ready",zipBtn:"Download everything (.zip)",download:"Download",
+ badgeSimple:"selectable text",badgeRaster:"image · not selectable",
+ badgeCropped:"cropped",badgeCroppedA4:"cropped · A4",errFile:"Error: {msg}",
+ waitRender:"Please wait: a page is still rendering.",
+ fallbackTitle:"🛟 Fallback: BentoPDF (online)",
+ fallbackIntro:"If EasyHide doesn't suit you, here is the exact method on BentoPDF. A connection is required to load the page, then everything happens in your browser.",
+ bentoPrivTitle:"BentoPDF is private too",
+ bentoPrivText:"Your document NEVER leaves your device: BentoPDF runs a PDF engine (PDFium compiled to WebAssembly) directly in your browser. Only the page's code is downloaded, never your files. This is explicitly confirmed in their FAQ (“the document itself never leaves your device”).",
+ fb1:"Open this exact link (the PDF editor): www.bentopdf.com/fr/edit-pdf",
+ fb2:"Add your file - ⚠️ this service only accepts PDFs.",fb3:"Go to “Shapes”.",
+ fb4:"Click the square, then click the color palette located just to the left of the left-pointing arrow, and pick white.",
+ fb5:"Place and resize the square over the ad, then export your PDF.",fallbackBtn:"Open the BentoPDF editor ↗",
+ examplesTitle:"👀 See labels that contain ads",
+ examplesText:"Curious what shipping labels with advertisements look like (before masking)? Examples can be seen on Reddit (r/vinted_france).",
+ examplesBtn:"See the examples on Reddit ↗",
+ quadrantTitle:"📦 Small parcels? Quarter-page labels",
+ quadrantText:"For small parcels, generate compact labels: 4 labels on a single A4 sheet. Less paper, less ink, and right-sized labels.",
+ quadrantBtn:"Open the quarter-page generator ↗",quadrantShort:"Quarter page",
+ supportTitle:"🐞 A problem? An idea?",issuesText:"With a GitHub account: open an issue (bugs, suggestions).",
+ issuesBtn:"Open an issue ↗",contactText:"No GitHub account? Contact me directly via the form.",contactBtn:"Contact me ↗",
+ footerNote:"Free, non-profit tool - your files stay with you.",
+ resetTitle:"Reset everything",resetDone:"Everything has been reset.",needFiles:"Add files first.",
+ selectForColor:"Tap a rectangle first, then click 🎨 to change its color.",
+ rectAdded:"White rectangle added at the center of the view.",rectRemoved:"Rectangle deleted.",noRects:"No rectangle to delete.",
+ errPdfBad:"Unrecognized PDF structure. Try “Secure” mode.",errPdfEnc:"This PDF is password-protected: it cannot be modified.",
+ errPdfNoPages:"PDF pages not found. Try “Secure” mode.",errImg:"Image unreadable by this browser (unsupported format?).",
+ errType:"Unsupported file type.",
+ errPdfjs:"The PDF component is not available offline. Connect once to download it (it will be cached), or use a screenshot of the label as an image.",
+ pdfDl:"Downloading the PDF component (once, ~1.4 MB, code only - never your files)…",
+ pdfReady:"PDF component ready: PDFs now work offline.",
+ pdfStatusInline:"PDF: 100% offline ✓",pdfStatusCached:"PDF: offline ✓ (cached)",pdfStatusNone:"PDF: component to download once",
+ fellBack:"{from} not supported by this browser → exported as {to}.",
+ bigImg:"Very large image: reduced to 8000 px max to save memory.",
+ bigPage:"Very large page: render resolution capped to save memory.",
+ zipName:"easyhide_results.zip",unitK:"KB",unitM:"MB"
+}};
+let LANG="fr";try{LANG=localStorage.getItem("eh_lang")||"fr";}catch(e){}
+if(!I18N[LANG])LANG="fr";
+function t(k,v){let s=(I18N[LANG][k]!==undefined)?I18N[LANG][k]:(I18N.fr[k]||k);if(v)for(const x in v)s=s.split("{"+x+"}").join(v[x]);return s;}
 
-    <script>
-        const { jsPDF } = window.jspdf; 
+/* ===== 2. Binary core ===== */
+const te=new TextEncoder();
+function bytesToStr(b){let s="";for(let i=0;i<b.length;i+=32768)s+=String.fromCharCode.apply(null,b.subarray(i,i+32768));return s;}
+function concatBytes(a){let n=0;for(const x of a)n+=x.length;const o=new Uint8Array(n);let p=0;for(const x of a){o.set(x,p);p+=x.length;}return o;}
+function f2(v){return (Math.round(v*100)/100).toString();}
+function hexRgb(h){const m=/^#?([0-9a-f]{6})$/i.exec(h||"");const n=m?parseInt(m[1],16):0xFFFFFF;return [((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255].map(v=>Math.round(v*1000)/1000);}
+async function inflateBytes(b){const ds=new DecompressionStream("deflate");const st=new Blob([b]).stream().pipeThrough(ds);return new Uint8Array(await new Response(st).arrayBuffer());}
+function lastMatch(re,s){const g=new RegExp(re.source,"g");let r=null,m;while((m=g.exec(s)))r=m;return r;}
+function mapRect(mb,rot,r){
+  const W=mb[2]-mb[0],H=mb[3]-mb[1];
+  const pt=(u,v)=>{switch(rot){case 90:return[mb[0]+v*W,mb[1]+u*H];case 180:return[mb[2]-u*W,mb[1]+v*H];case 270:return[mb[2]-v*W,mb[3]-u*H];default:return[mb[0]+u*W,mb[3]-v*H];}};
+  const a=pt(r.x,r.y),b=pt(r.x+r.w,r.y+r.h);
+  return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1])];
+}
+function a4Size(land){return land?[841.89,595.28]:[595.28,841.89];}
+/* Vector crop onto a kept-A4 page. Handles /Rotate 0,90,180,270 (rotation reset to 0).
+   land===null/undefined -> orientation from the crop itself; otherwise forced. */
+function cropA4Matrix(mb,rot,crop,land){
+  const W=mb[2]-mb[0],H=mb[3]-mb[1],side=(rot===90||rot===270);
+  const Dw=side?H:W,Dh=side?W:H;
+  const U0=crop.x*Dw,V0=crop.y*Dh,cw=Math.max(1e-6,crop.w*Dw),ch=Math.max(1e-6,crop.h*Dh);
+  const L=(land===null||land===undefined)?(cw>ch):!!land;
+  const [PW,PH]=a4Size(L);
+  const s=Math.min(PW/cw,PH/ch),ox=(PW-cw*s)/2,oy=(PH-ch*s)/2,K=PH-oy;
+  const m0=mb[0],m1=mb[1],m2=mb[2],m3=mb[3];
+  let m;
+  switch(rot){
+    case 90: m=[0,-s,s,0, ox-(m1+U0)*s, K+(m0+V0)*s];break;
+    case 180:m=[-s,0,0,-s, ox+(m2-U0)*s, K+(m1+V0)*s];break;
+    case 270:m=[0,s,-s,0, ox+(m3-U0)*s, K-(m2-V0)*s];break;
+    default: m=[s,0,0,s, ox-(m0+U0)*s, K-(m3-V0)*s];
+  }
+  return {m,pw:PW,ph:PH};
+}
+function setBox(d,key,val){
+  const re=new RegExp("/"+key+"\\s*(\\[[^\\]]*\\]|\\d+\\s+\\d+\\s+R)");
+  if(re.test(d))return d.replace(re,()=>"/"+key+" "+val);
+  return d.replace(/>>\s*$/,()=>"/"+key+" "+val+" >>");
+}
+function setNum(d,key,val){
+  const re=new RegExp("/"+key+"\\s*(\\d+\\s+\\d+\\s+R|-?[\\d.]+)");
+  if(re.test(d))return d.replace(re,()=>"/"+key+" "+val);
+  return d.replace(/>>\s*$/,()=>"/"+key+" "+val+" >>");
+}
+/* PDF "Simple": incremental update, keeps text, per-page rects + per-page vector crop. */
+async function pdfOverlay(orig,rectsFor,cropFor,keepA4,orientLand){
+  const s=bytesToStr(orig);const sx=s.lastIndexOf("startxref");
+  if(sx<0)throw new Error("PDF_BAD");
+  const prevXref=parseInt(s.slice(sx+9).trim(),10);if(!isFinite(prevXref))throw new Error("PDF_BAD");
+  const tail=s.slice(Math.max(0,s.length-4096)),head=s.slice(prevXref,prevXref+4096);
+  if(/\/Encrypt\b/.test(tail)||/\/Encrypt\b/.test(head))throw new Error("PDF_ENCRYPTED");
+  let sizeM=lastMatch(/\/Size\s+(\d+)/,tail),rootM=lastMatch(/\/Root\s+(\d+)\s+(\d+)\s+R/,tail);
+  if(!sizeM)sizeM=head.match(/\/Size\s+(\d+)/);if(!rootM)rootM=head.match(/\/Root\s+(\d+)\s+(\d+)\s+R/);
+  if(!sizeM||!rootM)throw new Error("PDF_BAD");
+  const oldSize=parseInt(sizeM[1],10),rootNum=parseInt(rootM[1],10),rootRef=rootM[1]+" "+rootM[2]+" R";
+  const raw=new Map();const objRe=/(\d+)\s+(\d+)\s+obj\b/g;let m;
+  while((m=objRe.exec(s))){
+    const from=objRe.lastIndex;let end=s.indexOf("endobj",from);const st=s.indexOf("stream",from);
+    if(st>=0&&(end<0||st<end))end=st;if(end<0)end=s.length;
+    const d=s.slice(from,end);if(!/^\s*(<<|\[|\d+\s*$)/.test(d))continue;
+    raw.set(parseInt(m[1],10),{gen:parseInt(m[2],10),dict:d,bodyAt:from});
+  }
+  const stm=new Map();
+  for(const [num,o] of raw){
+    if(!/\/Type\s*\/ObjStm\b/.test(o.dict))continue;
+    try{
+      let len;const li=o.dict.match(/\/Length\s+(\d+)\s+\d+\s+R/);
+      if(li){const lo=raw.get(parseInt(li[1],10));if(!lo)continue;len=parseInt(lo.dict.trim(),10);}
+      else{const ld=o.dict.match(/\/Length\s+(\d+)/);if(!ld)continue;len=parseInt(ld[1],10);}
+      let p=s.indexOf("stream",o.bodyAt);if(p<0)continue;p+=6;if(s[p]==="\r")p++;if(s[p]==="\n")p++;
+      const txt=bytesToStr(await inflateBytes(orig.subarray(p,p+len)));
+      const nM=o.dict.match(/\/N\s+(\d+)/),fM=o.dict.match(/\/First\s+(\d+)/);if(!nM||!fM)continue;
+      const N=parseInt(nM[1],10),First=parseInt(fM[1],10),hdr=txt.slice(0,First).trim().split(/\s+/).map(Number);
+      for(let i=0;i<N;i++){const on=hdr[2*i],off=First+hdr[2*i+1],end=(i+1<N)?First+hdr[2*i+3]:txt.length;stm.set(on,{gen:0,dict:txt.slice(off,end)});}
+    }catch(e){}
+  }
+  const pages=new Map();const isPage=d=>/\/Type\s*\/Page\b(?!\s*s)/.test(d);
+  for(const [num,o] of stm)if(isPage(o.dict))pages.set(num,o);
+  for(const [num,o] of raw)if(isPage(o.dict))pages.set(num,o);
+  if(pages.size===0)throw new Error("PDF_NOPAGES");
+  const getObj=n=>raw.get(n)||stm.get(n);
+  let order=null;
+  try{
+    const rt=getObj(rootNum),pm=rt?/\/Pages\s+(\d+)\s+\d+\s+R/.exec(rt.dict):null;
+    if(pm){
+      const acc=[],seen=new Set();
+      const walk=(num,depth)=>{
+        if(depth>64||seen.has(num))return;seen.add(num);const o=getObj(num);if(!o)return;
+        if(isPage(o.dict)){acc.push(num);return;}
+        const km=/\/Kids\s*(\[[^\]]*\]|(\d+)\s+\d+\s+R)/.exec(o.dict);let ks=null;
+        if(km){if(km[2]){const ko=getObj(parseInt(km[2],10));if(ko)ks=ko.dict;}else ks=km[1];}
+        if(!ks)return;const re=/(\d+)\s+\d+\s+R/g;let mm;while((mm=re.exec(ks)))walk(parseInt(mm[1],10),depth+1);
+      };
+      walk(parseInt(pm[1],10),0);const valid=acc.filter(n=>pages.has(n));if(valid.length)order=valid;
+    }
+  }catch(e){}
+  if(!order)order=[...pages.keys()];
+  function inherit(num,key,depth){
+    if(depth>16)return null;const o=getObj(num);if(!o)return null;
+    const re=new RegExp("/"+key+"\\s*(\\[[^\\]]*\\]|-?\\d+(?:\\.\\d+)?|(\\d+)\\s+\\d+\\s+R)"),mm=re.exec(o.dict);
+    if(mm){if(mm[2]){const tt=getObj(parseInt(mm[2],10));return tt?tt.dict.trim():null;}return mm[1];}
+    const par=/\/Parent\s+(\d+)\s+\d+\s+R/.exec(o.dict);if(par)return inherit(parseInt(par[1],10),key,depth+1);return null;
+  }
+  let nextNum=oldSize;const newObjs=[];
+  const pushStream=(num,text)=>{
+    const b=te.encode(text);
+    newObjs.push({num,gen:0,bytes:concatBytes([te.encode(num+" 0 obj\n<< /Length "+b.length+" >>\nstream\n"),b,te.encode("\nendstream\nendobj\n")])});
+  };
+  for(let idx=0;idx<order.length;idx++){
+    const num=order[idx],rects=rectsFor(idx),crop=cropFor?cropFor(idx):null,hasRects=rects&&rects.length;
+    if(!hasRects&&!crop)continue;
+    const o=pages.get(num);
+    const mbStr=inherit(num,"MediaBox",0)||"[0 0 612 792]";
+    const mb=mbStr.replace(/[\[\]]/g,"").trim().split(/\s+/).map(Number);
+    if(mb.length!==4||mb.some(v=>!isFinite(v)))throw new Error("PDF_BAD");
+    let rot=parseInt(inherit(num,"Rotate",0)||"0",10)||0;rot=((rot%360)+360)%360;
+    let d=o.dict.trim(),maskNum=null,prefixNum=null,suffixNum=null;
+    if(hasRects){
+      let content="q\n";
+      for(const r of rects){const [x,y,w,h]=mapRect(mb,rot,r);content+=hexRgb(r.color).join(" ")+" rg\n"+f2(x)+" "+f2(y)+" "+f2(w)+" "+f2(h)+" re\nf\n";}
+      content+="Q\n";
+      maskNum=nextNum++;pushStream(maskNum,content);
+    }
+    if(crop){
+      if(keepA4){
+        const a4=cropA4Matrix(mb,rot,crop,orientLand);
+        prefixNum=nextNum++;pushStream(prefixNum,"q\n"+a4.m.map(f2).join(" ")+" cm\n");
+        suffixNum=nextNum++;pushStream(suffixNum,"\nQ\n");
+        const box="[0 0 "+f2(a4.pw)+" "+f2(a4.ph)+"]";
+        d=setBox(d,"MediaBox",box);d=setBox(d,"CropBox",box);d=setNum(d,"Rotate","0");
+      }else{
+        const bx=mapRect(mb,rot,crop),bxs="["+f2(bx[0])+" "+f2(bx[1])+" "+f2(bx[0]+bx[2])+" "+f2(bx[1]+bx[3])+"]";
+        d=setBox(d,"MediaBox",bxs);d=setBox(d,"CropBox",bxs);
+      }
+    }
+    if(maskNum!==null||prefixNum!==null){
+      let origRefs=[];
+      const cm=/\/Contents\s*(\[[^\]]*\]|(\d+)\s+\d+\s+R)/.exec(d);
+      if(cm){
+        if(cm[2]){
+          const co=getObj(parseInt(cm[2],10));
+          if(co&&/^\s*\[/.test(co.dict))origRefs=co.dict.match(/\d+\s+\d+\s+R/g)||[];
+          else origRefs=[cm[1]];
+        }else origRefs=cm[1].match(/\d+\s+\d+\s+R/g)||[];
+        d=d.replace(cm[0],"@@C@@");
+      }else d=d.replace(/>>\s*$/,"@@C@@ >>");
+      const parts=[];
+      if(prefixNum!==null)parts.push(prefixNum+" 0 R");
+      for(const r of origRefs)parts.push(r);
+      if(maskNum!==null)parts.push(maskNum+" 0 R");
+      if(suffixNum!==null)parts.push(suffixNum+" 0 R");
+      d=d.replace("@@C@@",()=>"/Contents ["+parts.join(" ")+"]");
+    }
+    newObjs.push({num,gen:o.gen,bytes:te.encode(num+" "+o.gen+" obj\n"+d+"\nendobj\n")});
+  }
+  if(!newObjs.length)return orig;
+  const chunks=[orig,te.encode("\n")];let pos=orig.length+1;const entries=[];
+  for(const ob of newObjs){entries.push({num:ob.num,gen:ob.gen,off:pos});chunks.push(ob.bytes);pos+=ob.bytes.length;}
+  const xrefAt=pos;entries.sort((a,b)=>a.num-b.num);
+  let xref="xref\n0 1\n0000000000 65535 f \n";let i=0;
+  while(i<entries.length){
+    let j=i;while(j+1<entries.length&&entries[j+1].num===entries[j].num+1)j++;
+    xref+=entries[i].num+" "+(j-i+1)+"\n";
+    for(let k=i;k<=j;k++)xref+=String(entries[k].off).padStart(10,"0")+" "+String(entries[k].gen).padStart(5,"0")+" n \n";
+    i=j+1;
+  }
+  xref+="trailer\n<< /Size "+Math.max(oldSize,nextNum)+" /Root "+rootRef+" /Prev "+prevXref+" >>\nstartxref\n"+xrefAt+"\n%%EOF\n";
+  chunks.push(te.encode(xref));return concatBytes(chunks);
+}
+function buildRasterPdf(pages,dpi){
+  const chunks=[];let pos=0;const offs=[];const push=b=>{chunks.push(b);pos+=b.length;};const ps=s=>push(te.encode(s));
+  push(new Uint8Array([0x25,0x50,0x44,0x46,0x2D,0x31,0x2E,0x34,0x0A,0x25,0xE2,0xE3,0xCF,0xD3,0x0A]));
+  const n=pages.length,kids=pages.map((_,i)=>(3+3*i)+" 0 R").join(" ");
+  const obj=(num,body)=>{offs[num]=pos;ps(num+" 0 obj\n"+body+"\nendobj\n");};
+  obj(1,"<< /Type /Catalog /Pages 2 0 R >>");obj(2,"<< /Type /Pages /Kids ["+kids+"] /Count "+n+" >>");
+  pages.forEach((p,i)=>{
+    const pn=3+3*i,cn=pn+1,im=pn+2,W=p.pw||p.w*72/dpi,H=p.ph||p.h*72/dpi,iw=p.iw||W,ih=p.ih||H,ox=p.ox||0,oy=p.oy||0;
+    obj(pn,"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+f2(W)+" "+f2(H)+"] /Resources << /XObject << /Im0 "+im+" 0 R >> /ProcSet [/PDF /ImageC] >> /Contents "+cn+" 0 R >>");
+    const cs="q\n"+f2(iw)+" 0 0 "+f2(ih)+" "+f2(ox)+" "+f2(oy)+" cm\n/Im0 Do\nQ\n";
+    obj(cn,"<< /Length "+cs.length+" >>\nstream\n"+cs+"endstream");
+    offs[im]=pos;
+    ps(im+" 0 obj\n<< /Type /XObject /Subtype /Image /Width "+p.w+" /Height "+p.h+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+p.jpeg.length+" >>\nstream\n");
+    push(p.jpeg);ps("\nendstream\nendobj\n");
+  });
+  const xrefAt=pos,total=3+3*n;let x="xref\n0 "+total+"\n0000000000 65535 f \n";
+  for(let i=1;i<total;i++)x+=String(offs[i]).padStart(10,"0")+" 00000 n \n";
+  x+="trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xrefAt+"\n%%EOF\n";ps(x);return concatBytes(chunks);
+}
+function encodeGIF(img){
+  const w=img.width,h=img.height,data=img.data,pal=new Uint8Array(768);let pi=0;
+  for(let r=0;r<6;r++)for(let g=0;g<6;g++)for(let b=0;b<6;b++){pal[pi++]=r*51;pal[pi++]=g*51;pal[pi++]=b*51;}
+  for(let k=0;k<40;k++){const v=Math.round(k*255/39);pal[pi++]=v;pal[pi++]=v;pal[pi++]=v;}
+  const N=w*h,idx=new Uint8Array(N);
+  for(let p=0,o=0;p<N;p++,o+=4){
+    const r=data[o],g=data[o+1],b=data[o+2],cr=Math.round(r/51),cg=Math.round(g/51),cb=Math.round(b/51);
+    const ce=(r-cr*51)*(r-cr*51)+(g-cg*51)*(g-cg*51)+(b-cb*51)*(b-cb*51);
+    const lum=(r*306+g*601+b*117)>>10,gi=Math.round(lum*39/255),gv=Math.round(gi*255/39);
+    const ge=(r-gv)*(r-gv)+(g-gv)*(g-gv)+(b-gv)*(b-gv);idx[p]=ge<ce?216+gi:cr*36+cg*6+cb;
+  }
+  const CLEAR=256,EOI=257;let codeSize=9,next=258,dict=new Map();const bytes=[];let acc=0,nbits=0;
+  const emit=c=>{acc|=c<<nbits;nbits+=codeSize;while(nbits>=8){bytes.push(acc&255);acc>>>=8;nbits-=8;}};
+  emit(CLEAR);let prefix=idx[0];
+  for(let i=1;i<N;i++){
+    const k=idx[i],key=(prefix<<8)|k,fnd=dict.get(key);
+    if(fnd!==undefined){prefix=fnd;continue;}
+    emit(prefix);
+    if(next===4096){emit(CLEAR);dict=new Map();next=258;codeSize=9;}
+    else{if(next===(1<<codeSize)&&codeSize<12)codeSize++;dict.set(key,next++);}
+    prefix=k;
+  }
+  emit(prefix);emit(EOI);if(nbits>0)bytes.push(acc&255);
+  const out=[];const pushA=a=>{for(const v of a)out.push(v);};
+  pushA([0x47,0x49,0x46,0x38,0x39,0x61]);pushA([w&255,w>>8,h&255,h>>8,0xF7,0,0]);pushA(pal);
+  pushA([0x2C,0,0,0,0,w&255,w>>8,h&255,h>>8,0]);out.push(8);
+  for(let i=0;i<bytes.length;i+=255){const nn=Math.min(255,bytes.length-i);out.push(nn);for(let j=0;j<nn;j++)out.push(bytes[i+j]);}
+  out.push(0,0x3B);return new Uint8Array(out);
+}
+/* AVIF: WebCodecs (AV1) + ISOBMFF muxer */
+function u16b(v){return new Uint8Array([(v>>8)&255,v&255]);}
+function u32b(v){return new Uint8Array([(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255]);}
+function asciiB(s){const o=new Uint8Array(s.length);for(let i=0;i<s.length;i++)o[i]=s.charCodeAt(i);return o;}
+function bx(type,...parts){const p=concatBytes(parts),o=new Uint8Array(8+p.length);new DataView(o.buffer).setUint32(0,o.length);for(let i=0;i<4;i++)o[4+i]=type.charCodeAt(i);o.set(p,8);return o;}
+function fbx(type,ver,flags,...parts){return bx(type,new Uint8Array([ver,(flags>>16)&255,(flags>>8)&255,flags&255]),...parts);}
+function parseObus(data){
+  const obus=[];let p=0;
+  while(p<data.length){
+    const start=p,b0=data[p];p++;const typ=(b0>>3)&15,ext=(b0>>2)&1,has=(b0>>1)&1;if(ext)p++;
+    let size;if(has){size=0;let shift=0,x;do{x=data[p];p++;size|=(x&0x7f)<<shift;shift+=7;}while(x&0x80);}else size=data.length-p;
+    obus.push({type:typ,full:data.subarray(start,p+size),payload:data.subarray(p,p+size)});p+=size;
+  }
+  return obus;
+}
+function av1SeqInfo(payload){
+  let bit=0;
+  const f=n=>{let v=0;for(let i=0;i<n;i++){v=(v<<1)|((payload[bit>>3]>>(7-(bit&7)))&1);bit++;}return v;};
+  const uvlc=()=>{let z=0;while(z<32&&f(1)===0)z++;if(z>=32)return 0xFFFFFFFF;return ((1<<z)-1)+f(z);};
+  const profile=f(3);f(1);const reduced=f(1);let level=0,tier=0;
+  if(reduced){level=f(5);}
+  else{
+    let decmodel=false;const timing=f(1);
+    if(timing){f(32);f(32);const equal=f(1);if(equal)uvlc();decmodel=!!f(1);if(decmodel){f(32);f(5);f(5);}}
+    f(1);f(5);f(12);level=f(5);if(level>7)tier=f(1);
+  }
+  return {profile,level,tier};
+}
+function muxAvif(obuBytes,w,h){
+  const obus=parseObus(obuBytes),seq=obus.find(o=>o.type===1);if(!seq)return null;
+  const mdatPayload=concatBytes(obus.filter(o=>o.type!==2).map(o=>o.full));
+  const {profile,level,tier}=av1SeqInfo(seq.payload);
+  let high=0,mono=0,sx=1,sy=1;if(profile===1){sx=0;sy=0;}else if(profile>=2){high=1;}
+  const flags=(tier<<7)|(high<<6)|(mono<<4)|(sx<<3)|(sy<<2);
+  const av1c=concatBytes([new Uint8Array([0x81,(profile<<5)|level,flags,0]),seq.full]);
+  const ftyp=bx("ftyp",asciiB("avif"),u32b(0),asciiB("avif"),asciiB("mif1"),asciiB("miaf"));
+  const hdlr=fbx("hdlr",0,0,u32b(0),asciiB("pict"),u32b(0),u32b(0),u32b(0),new Uint8Array([0]));
+  const pitm=fbx("pitm",0,0,u16b(1));
+  const iloc=fbx("iloc",0,0,new Uint8Array([0x44,0x00]),u16b(1),u16b(1),u16b(0),u16b(1),u32b(0),u32b(mdatPayload.length));
+  const infe=fbx("infe",2,0,u16b(1),u16b(0),asciiB("av01"),asciiB("Image"),new Uint8Array([0]));
+  const iinf=fbx("iinf",0,0,u16b(1),infe);
+  const ipco=bx("ipco",bx("av1C",av1c),fbx("ispe",0,0,u32b(w),u32b(h)),fbx("pixi",0,0,new Uint8Array([3,8,8,8])));
+  const ipma=fbx("ipma",0,0,u16b(1),new Uint8Array([3,0x81,0x02,0x03]));
+  const meta=fbx("meta",0,0,hdlr,pitm,iloc,iinf,bx("iprp",ipco,ipma));
+  const mdat=bx("mdat",mdatPayload);
+  const out=concatBytes([ftyp,meta,mdat]);
+  const ilocStart=ftyp.length+12+hdlr.length+pitm.length;
+  new DataView(out.buffer).setUint32(ilocStart+22,ftyp.length+meta.length+8);
+  return out;
+}
+async function encodeAvifWebCodecs(canvas,q){
+  const w=canvas.width,h=canvas.height,W=w+(w&1),H=h+(h&1);let src=canvas;
+  if(W!==w||H!==h){src=document.createElement("canvas");src.width=W;src.height=H;const c=src.getContext("2d",{alpha:false});c.fillStyle="#fff";c.fillRect(0,0,W,H);c.drawImage(canvas,0,0);}
+  const cfg={codec:"av01.0.04M.08",width:W,height:H,bitrate:Math.max(20000,Math.round(W*H*(0.03+q*q*1.6))),framerate:1,latencyMode:"quality"};
+  const chunks=[];let err=null;
+  const enc=new VideoEncoder({output:ch=>{const b=new Uint8Array(ch.byteLength);ch.copyTo(b);chunks.push(b);},error:e=>{err=e;}});
+  enc.configure(cfg);const fr=new VideoFrame(src,{timestamp:0});enc.encode(fr,{keyFrame:true});fr.close();
+  await enc.flush();enc.close();
+  if(err||!chunks.length)throw new Error("avif");
+  const file=muxAvif(concatBytes(chunks),W,H);if(!file)throw new Error("avif");
+  const blob=new Blob([file],{type:"image/avif"});
+  try{const bmp=await createImageBitmap(blob);bmp.close();}catch(e){throw new Error("avif");}
+  return blob;
+}
+function makeZip(files){
+  const crcT=new Uint32Array(256);for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);crcT[i]=c>>>0;}
+  const crc32=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=crcT[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0;};
+  const parts=[],central=[];let off=0;const now=new Date();
+  const dtime=((now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1))&0xFFFF;
+  const ddate=(((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate())&0xFFFF;
+  for(const f of files){
+    const name=te.encode(f.name),crc=crc32(f.data),sz=f.data.length,lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);lh.setUint16(10,dtime,true);lh.setUint16(12,ddate,true);
+    lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,name.length,true);lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),name,f.data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(10,0,true);ch.setUint16(12,dtime,true);ch.setUint16(14,ddate,true);
+    ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,name.length,true);ch.setUint32(38,0,true);ch.setUint32(42,off,true);
+    central.push(new Uint8Array(ch.buffer),name);off+=30+name.length+sz;
+  }
+  let cSize=0;for(const c of central)cSize+=c.length;
+  const end=new DataView(new ArrayBuffer(22));end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);end.setUint32(12,cSize,true);end.setUint32(16,off,true);
+  return concatBytes([...parts,...central,new Uint8Array(end.buffer)]);
+}
 
-        // Références DOM
-        const allQuadrants = document.querySelectorAll('.quadrant');
-        const fileUpload = document.getElementById('fileUpload');
-        const outputFormatSelect = document.getElementById('outputFormatSelect');
-        const initiateProcessingButton = document.getElementById('initiateProcessingButton');
-        const imageCanvas = document.getElementById('imageCanvas');
-        const canvasContainer = document.getElementById('canvasContainer');
-        const applyAndDownloadButton = document.getElementById('applyAndDownloadButton');
-        const messageBox = document.getElementById('message-box');
-        const loader = document.getElementById('loader');
-        const resetAllButtonTop = document.getElementById('resetAllButtonTop'); 
-        const resetAllButtonBottom = document.getElementById('resetAllButtonBottom');
-        const ctx = imageCanvas.getContext('2d');
+/* ===== 3. pdf.js loader (main-thread worker, file:// safe) ===== */
+const PDFJS_BASE="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+const LS_LIB="eh_pdfjs_lib_311174",LS_WORKER="eh_pdfjs_worker_311174";let pdfjsPromise=null;
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function inlineText(id){const el=document.getElementById(id),s=el?el.textContent:"";return s.length>10000?s:null;}
+function installPdfjs(libText,workerText){
+  if(!window.pdfjsLib){const sc=document.createElement("script");sc.textContent=libText;document.head.appendChild(sc);}
+  if(workerText&&!(window.pdfjsWorker&&window.pdfjsWorker.WorkerMessageHandler)){
+    const ws=document.createElement("script");ws.textContent=workerText;document.head.appendChild(ws);
+  }
+}
+function pdfReady(){return !!(window.pdfjsLib&&window.pdfjsWorker&&window.pdfjsWorker.WorkerMessageHandler);}
+function pdfComponentState(){
+  if(inlineText("pdfjs-lib-inline")&&inlineText("pdfjs-worker-inline"))return "inline";
+  if(pdfReady())return "inline";
+  if(lsGet(LS_LIB)&&lsGet(LS_WORKER))return "cached";return "none";
+}
+function updatePdfStatus(){const st=pdfComponentState(),el=$("pdfStatus");el.textContent=t(st==="inline"?"pdfStatusInline":st==="cached"?"pdfStatusCached":"pdfStatusNone");el.className="badge "+(st==="none"?"gray":"green");}
+async function ensurePdfJs(){
+  if(pdfReady())return;
+  if(pdfjsPromise)return pdfjsPromise;
+  pdfjsPromise=(async()=>{
+    const il=inlineText("pdfjs-lib-inline"),iw=inlineText("pdfjs-worker-inline");
+    if(il&&iw){installPdfjs(il,iw);updatePdfStatus();return;}
+    const cl=lsGet(LS_LIB),cw=lsGet(LS_WORKER);
+    if(cl&&cw){installPdfjs(cl,cw);updatePdfStatus();return;}
+    toast(t("pdfDl"),"info",9000);let lib,worker;
+    try{const [r1,r2]=await Promise.all([fetch(PDFJS_BASE+"pdf.min.js"),fetch(PDFJS_BASE+"pdf.worker.min.js")]);if(!r1.ok||!r2.ok)throw new Error("net");lib=await r1.text();worker=await r2.text();}
+    catch(e){throw new Error("PDFJS_MISSING");}
+    lsSet(LS_LIB,lib);lsSet(LS_WORKER,worker);installPdfjs(lib,worker);updatePdfStatus();toast(t("pdfReady"),"ok");
+  })();
+  try{await pdfjsPromise;}finally{pdfjsPromise=null;}
+}
 
-        // État global
-        let selectedQuadrantInfo = { orientation: null, quadrantIndex: null };
-        let allUploadedFiles = []; 
-        let currentFileForAdjustment = null; 
-        
-        let currentSelectionRect = { x: 0, y: 0, w: 0, h: 0, isDefined: false };
-        let activeDragAction = null; 
-        let dragStartCoords = { x: 0, y: 0 }; 
-        let rectStartCoords = { x: 0, y: 0, w: 0, h: 0 };
-        const HANDLE_SIZE = 14; 
-        let handles = []; 
+/* ===== 4. State & DOM ===== */
+const $=id=>document.getElementById(id);
+const cv=$("cv"),ctx=cv.getContext("2d"),stageOuter=$("stageOuter"),stageInner=$("stageInner");
+const handles=[...document.querySelectorAll(".handle")];
+const state={files:[],preview:null,rects:[{x:.5,y:.5,w:.5,h:.5,color:"#ffffff"}],sel:0,zoom:1,action:null,start:null,snap:null,
+ results:[],busy:false,pdfDoc:null,numPages:1,pageMode:"all",curPage:1,pageRects:null,pageCrops:null,pageCache:new Map(),
+ pageLoading:false,navN:0,crop:null,cropA4:false,a4Orient:"source",srcLand:false,editCrop:false};
+function maskRects(){return (state.pageMode==="manual"&&state.pageRects)?state.pageRects[state.curPage-1]:state.rects;}
+function curCrop(){return (state.pageMode==="manual"&&state.pageCrops)?state.pageCrops[state.curPage-1]:state.crop;}
+function setCurCrop(v){if(state.pageMode==="manual"&&state.pageCrops)state.pageCrops[state.curPage-1]=v;else state.crop=v;}
+function R(){return (state.editCrop&&curCrop())?[curCrop()]:maskRects();}
+function orientLand(){return state.a4Orient==="source"?state.srcLand:null;}
+function toast(msg,type,ms){const el=$("toast");el.textContent=msg;el.className=type||"";el.style.display="block";clearTimeout(toast._t);toast._t=setTimeout(()=>{el.style.display="none";},ms||3500);}
+function errMessage(code){const map={PDF_BAD:"errPdfBad",PDF_ENCRYPTED:"errPdfEnc",PDF_NOPAGES:"errPdfNoPages",IMG:"errImg",PDFJS_MISSING:"errPdfjs",TYPE:"errType"};return map[code]?t(map[code]):code;}
+function fmtSize(n){return n>=1048576?(n/1048576).toFixed(1).replace(".",LANG==="fr"?",":".")+" "+t("unitM"):Math.max(1,Math.round(n/1024))+" "+t("unitK");}
+function isPdf(f){return f.type==="application/pdf"||/\.pdf$/i.test(f.name);}
+function isImg(f){return f.type.startsWith("image/")||/\.(png|jpe?g|webp|avif|gif|bmp)$/i.test(f.name);}
+function baseName(n){return n.replace(/\.[^.]+$/,"")||n;}
+function extOf(m){return {"application/pdf":"pdf","image/png":"png","image/jpeg":"jpg","image/webp":"webp","image/avif":"avif","image/gif":"gif"}[m]||"bin";}
+async function killDoc(d){if(!d)return;try{await d.destroy();}catch(e){}}
+async function destroyDoc(){const d=state.pdfDoc;state.pdfDoc=null;await killDoc(d);}
+function settle(ms){return new Promise(r=>setTimeout(r,ms||30));}
 
-        // --- Constantes pour PDF A4 (en points, 1pt = 1/72 inch) ---
-        const A4_WIDTH_PT = 595.28;
-        const A4_HEIGHT_PT = 841.89;
+/* ===== 4b. Hardened rendering + differential verification ===== */
+let renderChain=Promise.resolve();
+function serializeRender(fn){const run=renderChain.then(fn,fn);renderChain=run.then(()=>{},()=>{});return run;}
+function makeOutCanvas(w,h){
+  const c=document.createElement("canvas");
+  c.width=Math.max(1,Math.round(w));c.height=Math.max(1,Math.round(h));
+  const x=c.getContext("2d",{alpha:false});
+  x.fillStyle="#ffffff";x.fillRect(0,0,c.width,c.height);
+  return {c,x};
+}
+const FP_N=32;
+function fingerprint(c){
+  const s=document.createElement("canvas");s.width=s.height=FP_N;
+  const x=s.getContext("2d",{alpha:false,willReadFrequently:true});
+  x.fillStyle="#ffffff";x.fillRect(0,0,FP_N,FP_N);
+  x.drawImage(c,0,0,FP_N,FP_N);
+  const src=x.getImageData(0,0,FP_N,FP_N).data;
+  const d=new Uint8ClampedArray(src);
+  let blue=0,flat=true,sum=0,sum2=0;
+  const r0=d[0],g0=d[1],b0=d[2];
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i],g=d[i+1],b=d[i+2];
+    if(r!==r0||g!==g0||b!==b0)flat=false;
+    if(b-r>30)blue++;
+    const l=(r*299+g*587+b*114)/1000;sum+=l;sum2+=l*l;
+  }
+  const n=FP_N*FP_N,mean=sum/n,std=Math.sqrt(Math.max(0,sum2/n-mean*mean));
+  const white=(r0>247&&g0>247&&b0>247);
+  return {d,blue:blue/n,flat:flat&&!white,std,mean};
+}
+function suspiciousCast(fp,strongOnly){
+  if(fp.flat)return true;
+  return fp.blue>(strongOnly?0.85:0.55);
+}
+function fpDiff(a,b){
+  let s=0;const n=a.d.length;
+  for(let i=0;i<n;i+=4)s+=Math.abs(a.d[i]-b.d[i])+Math.abs(a.d[i+1]-b.d[i+1])+Math.abs(a.d[i+2]-b.d[i+2]);
+  return s/((n/4)*3);
+}
+let bigPageWarned=false;
+function cappedScale(w,h,want){
+  let s=want;
+  const maxDim=6000,maxPx=16e6;
+  s=Math.min(s,maxDim/Math.max(w,h));
+  s=Math.min(s,Math.sqrt(maxPx/Math.max(1,w*h)));
+  if(s<want-1e-6&&!bigPageWarned){bigPageWarned=true;toast(t("bigPage"),"warn",4000);}
+  return Math.max(.05,s);
+}
+async function renderPageCanvas(page,scale,noRetry){
+  return serializeRender(async()=>{
+    const v1=page.getViewport({scale:1});
+    const sc=cappedScale(v1.width,v1.height,scale);
+    const vp=page.getViewport({scale:sc});
+    let out=makeOutCanvas(vp.width,vp.height);
+    await page.render({canvasContext:out.x,viewport:vp,background:"#ffffff"}).promise;
+    let fp=fingerprint(out.c);
+    if(!noRetry&&suspiciousCast(fp,true)){
+      try{
+        page.cleanup();
+        const second=makeOutCanvas(vp.width,vp.height);
+        await page.render({canvasContext:second.x,viewport:vp,background:"#ffffff"}).promise;
+        const fp2=fingerprint(second.c);
+        if(fpDiff(fp,fp2)>6||!suspiciousCast(fp2,true)){out=second;}
+      }catch(e){}
+    }
+    return out.c;
+  });
+}
 
+/* ===== 5. Files & preview ===== */
+function setFiles(list){
+  state.files=[...list].filter(f=>isPdf(f)||isImg(f));clearResults();updateFileList();$("applyBtn").disabled=true;
+  if(state.files.length)loadPreview();
+  else{destroyDoc();state.preview=null;state.numPages=1;showEditor(false);updatePageUI();updateCropUI();}
+}
+function updateFileList(){const el=$("fileList");if(!state.files.length){el.textContent=t("filesNone");return;}const names=state.files.slice(0,3).map(f=>f.name).join(", ")+(state.files.length>3?"…":"");el.textContent=t("filesCount",{n:state.files.length,names});}
+$("drop").addEventListener("click",()=>$("fileInput").click());
+$("drop").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("fileInput").click();}});
+$("fileInput").addEventListener("change",e=>setFiles(e.target.files));
+["dragover","dragenter"].forEach(ev=>$("drop").addEventListener(ev,e=>{e.preventDefault();$("drop").classList.add("over");}));
+["dragleave","drop"].forEach(ev=>$("drop").addEventListener(ev,e=>{e.preventDefault();$("drop").classList.remove("over");}));
+$("drop").addEventListener("drop",e=>{if(e.dataTransfer&&e.dataTransfer.files.length)setFiles(e.dataTransfer.files);});
+async function loadBitmap(file){
+  if("createImageBitmap" in window){try{return await createImageBitmap(file);}catch(e){}}
+  return await new Promise((res,rej)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{URL.revokeObjectURL(u);res(im);};im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("IMG"));};im.src=u;});
+}
+function showEditor(on){stageOuter.style.display=on?"block":"none";$("editorPlaceholder").style.display=on?"none":"block";}
+function pdfPreviewScale(w,h){return Math.min(1600,Math.max(w,h)*2)/Math.max(w,h);}
+async function openPdfDoc(file){
+  await ensurePdfJs();
+  const buf=await file.arrayBuffer();
+  return pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+}
+async function loadPreview(){
+  const f=state.files[0];if(!f)return;
+  await destroyDoc();
+  state.pageCache.clear();state.pageMode="all";state.pageRects=null;state.pageCrops=null;state.curPage=1;state.numPages=1;state.navN=0;bigPageWarned=false;
+  $("editorPlaceholder").textContent="…";showEditor(false);
+  try{
+    let src;
+    if(isPdf(f)){
+      const doc=await openPdfDoc(f);state.pdfDoc=doc;state.numPages=doc.numPages;
+      const page=await doc.getPage(1),vp1=page.getViewport({scale:1});
+      state.srcLand=vp1.width>vp1.height;
+      src=await renderPageCanvas(page,pdfPreviewScale(vp1.width,vp1.height));
+      state.pageCache.set(1,src);
+    }else{
+      const bmp=await loadBitmap(f),k=Math.min(1,1600/Math.max(bmp.width,bmp.height)),off=document.createElement("canvas");
+      state.srcLand=bmp.width>bmp.height;
+      off.width=Math.max(1,Math.round(bmp.width*k));off.height=Math.max(1,Math.round(bmp.height*k));
+      const ox=off.getContext("2d",{alpha:false});ox.fillStyle="#fff";ox.fillRect(0,0,off.width,off.height);
+      ox.drawImage(bmp,0,0,off.width,off.height);if(bmp.close)bmp.close();src=off;
+    }
+    state.preview=src;cv.width=src.width;cv.height=src.height;state.zoom=1;
+    showEditor(true);fitZoom();render();$("applyBtn").disabled=false;updatePageUI();updateOptions();updateCropUI();
+  }catch(err){console.error(err);state.preview=null;showEditor(false);$("editorPlaceholder").textContent=errMessage(err.message||"IMG");$("applyBtn").disabled=true;updatePageUI();updateCropUI();}
+}
+async function reopenPreviewDoc(){
+  const f=state.files[0];if(!f||!isPdf(f))return;
+  try{
+    await settle();
+    state.pdfDoc=await openPdfDoc(f);
+    state.pageCache.clear();state.navN=0;
+    await renderPdfPage(state.curPage);
+    updatePageUI();
+  }catch(e){console.error(e);updatePageUI();}
+}
 
-        function showMessage(text, type = 'info', duration = 4000) {
-            messageBox.textContent = text;
-            messageBox.className = ''; 
-            messageBox.classList.add(type);
-            messageBox.style.display = 'block';
-            setTimeout(() => { messageBox.style.display = 'none'; }, duration);
+/* ===== 6. Pages ===== */
+function updatePageUI(){
+  const multi=!!state.pdfDoc&&state.numPages>1;$("pageModeWrap").style.display=multi?"block":"none";
+  $("pageModeAll").classList.toggle("active",state.pageMode==="all");$("pageModeManual").classList.toggle("active",state.pageMode==="manual");
+  $("pageModeHint").textContent=t(state.pageMode==="manual"?"pageHintManual":"pageHintAll");
+  if(state.preview)$("applyBtn").disabled=state.pageLoading||state.busy;
+  const nav=$("pageNav"),showNav=multi&&state.pageMode==="manual";nav.style.display=showNav?"flex":"none";
+  if(showNav){
+    const sel=$("pageSel");
+    if(state.navN!==state.numPages){sel.innerHTML="";for(let i=1;i<=state.numPages;i++){const o=document.createElement("option");o.value=i;o.textContent=i+" / "+state.numPages;sel.appendChild(o);}state.navN=state.numPages;}
+    sel.value=state.curPage;
+    $("navPrev").disabled=$("navFirst").disabled=state.curPage<=1||state.pageLoading;
+    $("navNext").disabled=$("navLast").disabled=state.curPage>=state.numPages||state.pageLoading;sel.disabled=state.pageLoading;
+  }
+}
+async function renderPdfPage(n){
+  if(!state.pdfDoc||state.pageLoading||n<1||n>state.numPages)return;
+  state.pageLoading=true;updatePageUI();
+  try{
+    let c=state.pageCache.get(n);
+    if(!c){
+      const page=await state.pdfDoc.getPage(n),vp1=page.getViewport({scale:1});
+      c=await renderPageCanvas(page,pdfPreviewScale(vp1.width,vp1.height));
+      if(state.pageCache.size>=5){const k=state.pageCache.keys().next().value;state.pageCache.delete(k);}
+      state.pageCache.set(n,c);
+    }
+    state.curPage=n;
+    if(state.editCrop&&!curCrop())state.editCrop=false;
+    state.sel=(state.editCrop&&curCrop())?0:-1;
+    state.preview=c;cv.width=c.width;cv.height=c.height;fitZoom();render();updateCropUI();
+  }catch(e){toast(errMessage(e.message||"IMG"),"err");}
+  state.pageLoading=false;updatePageUI();
+}
+function setPageMode(mode){
+  if(mode==="manual"){
+    if(!state.pdfDoc||state.numPages<2)return;
+    state.pageRects=Array.from({length:state.numPages},(_,i)=>i===0?state.rects.map(r=>({...r})):[]);
+    state.pageCrops=Array.from({length:state.numPages},(_,i)=>(i===0&&state.crop)?{...state.crop}:null);
+    state.pageMode="manual";state.sel=(state.editCrop&&curCrop())?0:-1;renderPdfPage(1);
+  }else{
+    if(state.pageMode==="manual"&&state.pageRects)state.rects=state.pageRects[0].map(r=>({...r}));
+    if(state.pageMode==="manual"&&state.pageCrops)state.crop=state.pageCrops[0]?{...state.pageCrops[0]}:null;
+    state.pageMode="all";state.pageRects=null;state.pageCrops=null;state.sel=(state.editCrop&&state.crop)?0:-1;
+    if(state.curPage!==1&&state.pdfDoc)renderPdfPage(1);else{state.curPage=1;render();}
+  }
+  updatePageUI();updateCropUI();
+}
+$("pageModeAll").addEventListener("click",()=>setPageMode("all"));
+$("pageModeManual").addEventListener("click",()=>setPageMode("manual"));
+$("navFirst").addEventListener("click",()=>renderPdfPage(1));
+$("navPrev").addEventListener("click",()=>renderPdfPage(state.curPage-1));
+$("navNext").addEventListener("click",()=>renderPdfPage(state.curPage+1));
+$("navLast").addEventListener("click",()=>renderPdfPage(state.numPages));
+$("pageSel").addEventListener("change",e=>renderPdfPage(parseInt(e.target.value,10)));
+$("navCopy").addEventListener("click",()=>{
+  if(!state.pageRects)return;
+  const src=maskRects().map(r=>({...r})),c=curCrop();
+  for(let i=0;i<state.pageRects.length;i++){state.pageRects[i]=src.map(r=>({...r}));if(state.pageCrops)state.pageCrops[i]=c?{...c}:null;}
+  toast(t("copiedAll"),"ok");
+});
+(function(){
+  const nav=$("pageNav"),grip=$("navGrip");let drag=null;
+  function place(x,y){nav.style.transform="none";nav.style.bottom="auto";nav.style.left=Math.min(Math.max(4,x),window.innerWidth-nav.offsetWidth-4)+"px";nav.style.top=Math.min(Math.max(4,y),window.innerHeight-nav.offsetHeight-4)+"px";}
+  grip.addEventListener("pointerdown",e=>{e.preventDefault();grip.setPointerCapture(e.pointerId);const b=nav.getBoundingClientRect();drag={dx:e.clientX-b.left,dy:e.clientY-b.top};});
+  grip.addEventListener("pointermove",e=>{if(!drag)return;e.preventDefault();place(e.clientX-drag.dx,e.clientY-drag.dy);});
+  const end=()=>{if(drag){drag=null;lsSet("eh_navpos",JSON.stringify({l:nav.style.left,t:nav.style.top}));}};
+  grip.addEventListener("pointerup",end);grip.addEventListener("pointercancel",end);
+  try{const p=JSON.parse(lsGet("eh_navpos")||"null");if(p&&p.l&&p.t)place(parseFloat(p.l),parseFloat(p.t));}catch(e){}
+  window.addEventListener("resize",()=>{if(nav.style.top)place(parseFloat(nav.style.left),parseFloat(nav.style.top));});
+})();
+
+/* ===== 7. Editor ===== */
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+function fitZoom(){const fitW=Math.max(200,stageOuter.clientWidth-2);cv.style.width=Math.round(fitW*state.zoom)+"px";cv.style.height="auto";}
+function visibleCanvasRegion(){
+  const ob=stageOuter.getBoundingClientRect(),cb=cv.getBoundingClientRect();
+  const x1=Math.max(ob.left,cb.left),y1=Math.max(ob.top,cb.top),x2=Math.min(ob.right,cb.right),y2=Math.min(ob.bottom,cb.bottom);
+  let x=(x1-cb.left)/cb.width,y=(y1-cb.top)/cb.height,w=(x2-x1)/cb.width,h=(y2-y1)/cb.height;
+  if(!(w>0&&h>0)){x=0;y=0;w=1;h=1;}
+  return {x:clamp(x,0,1),y:clamp(y,0,1),w:clamp(w,.02,1),h:clamp(h,.02,1)};
+}
+function render(){
+  if(!state.preview)return;const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);ctx.drawImage(state.preview,0,0,W,H);
+  const masks=maskRects();
+  masks.forEach((r,i)=>{
+    const x=r.x*W,y=r.y*H,w=r.w*W,h=r.h*H,sel=(!state.editCrop&&i===state.sel);
+    ctx.globalAlpha=.55;ctx.fillStyle=r.color;ctx.fillRect(x,y,w,h);ctx.globalAlpha=1;
+    ctx.lineWidth=Math.max(2,W/450);ctx.strokeStyle=sel?"#2563eb":"rgba(15,23,42,.6)";ctx.setLineDash(sel?[]:[8,5]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);
+    const bs=Math.max(18,W/40);ctx.fillStyle=sel?"#2563eb":"#334155";ctx.fillRect(x,y,bs,bs);
+    ctx.fillStyle="#fff";ctx.font="bold "+Math.round(bs*.65)+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(i+1),x+bs/2,y+bs/2+1);
+  });
+  const crop=curCrop();
+  if(crop){
+    const x=crop.x*W,y=crop.y*H,w=crop.w*W,h=crop.h*H;
+    ctx.fillStyle="rgba(15,23,42,.5)";ctx.fillRect(0,0,W,y);ctx.fillRect(0,y+h,W,H-(y+h));ctx.fillRect(0,y,x,h);ctx.fillRect(x+w,y,W-(x+w),h);
+    ctx.strokeStyle=state.editCrop?"#16a34a":"rgba(22,163,74,.75)";ctx.lineWidth=Math.max(2,W/380);ctx.setLineDash([10,6]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);
+    const bs=Math.max(18,W/40);ctx.fillStyle="#16a34a";ctx.fillRect(x,y,bs,bs);ctx.fillStyle="#fff";ctx.font="bold "+Math.round(bs*.6)+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("✂",x+bs/2,y+bs/2+1);
+    if(state.cropA4){
+      const L=state.a4Orient==="source"?state.srcLand:(w>h);
+      const [pw,ph]=a4Size(L);
+      const aw=Math.max(26,W*.11),ah=aw*(ph/pw);
+      ctx.globalAlpha=.92;ctx.fillStyle="#ffffff";ctx.fillRect(W-aw-10,10,aw,ah);ctx.globalAlpha=1;
+      ctx.strokeStyle="#16a34a";ctx.lineWidth=Math.max(1.5,W/600);ctx.setLineDash([]);ctx.strokeRect(W-aw-10,10,aw,ah);
+      ctx.fillStyle="#16a34a";ctx.font="bold "+Math.max(9,Math.round(aw*.24))+"px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("A4",W-aw/2-10,10+ah/2);
+    }
+  }
+  updateHandles();
+}
+function updateHandles(){
+  const r=R()[state.sel],pos={tl:[0,0],t:[.5,0],tr:[1,0],l:[0,.5],r:[1,.5],bl:[0,1],b:[.5,1],br:[1,1]};
+  handles.forEach(hd=>{
+    hd.classList.toggle("crop",state.editCrop);
+    if(!r||!state.preview){hd.style.display="none";return;}
+    const p=pos[hd.dataset.h];hd.style.left=((r.x+p[0]*r.w)*100)+"%";hd.style.top=((r.y+p[1]*r.h)*100)+"%";hd.style.display="block";
+  });
+}
+function normPos(e){const b=cv.getBoundingClientRect();return {x:Math.min(1,Math.max(0,(e.clientX-b.left)/b.width)),y:Math.min(1,Math.max(0,(e.clientY-b.top)/b.height))};}
+stageInner.addEventListener("pointerdown",e=>{
+  if(!state.preview||state.busy)return;e.preventDefault();stageInner.setPointerCapture(e.pointerId);
+  const p=normPos(e);state.start=p;const h=e.target.dataset&&e.target.dataset.h;
+  if(h&&state.sel>=0){state.action="resize-"+h;state.snap={...R()[state.sel]};return;}
+  const rects=R();
+  for(let i=rects.length-1;i>=0;i--){const r=rects[i];if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h){state.sel=i;state.action="move";state.snap={...r};render();return;}}
+  if(state.editCrop){state.action=null;return;}
+  state.action="draw";state.snap=null;
+});
+stageInner.addEventListener("pointermove",e=>{
+  if(!state.action||!state.preview)return;e.preventDefault();
+  const p=normPos(e),dx=p.x-state.start.x,dy=p.y-state.start.y,MIN=state.editCrop?.05:.01,rects=R();
+  if(state.action==="draw"){
+    if(!state.snap){if(Math.abs(dx)<.006&&Math.abs(dy)<.006)return;rects.push({x:state.start.x,y:state.start.y,w:0,h:0,color:"#ffffff"});state.sel=rects.length-1;state.snap={x:state.start.x,y:state.start.y,w:0,h:0};state.action="resize-br";}
+  }
+  if(state.action==="move"){const r=rects[state.sel],s=state.snap;r.x=clamp(s.x+dx,0,1-s.w);r.y=clamp(s.y+dy,0,1-s.h);}
+  else if(state.action.startsWith("resize-")){
+    const r=rects[state.sel],s=state.snap,ty=state.action.slice(7);let x=s.x,y=s.y,w=s.w,h=s.h;
+    if(ty.includes("l")){const nx=clamp(s.x+dx,0,s.x+s.w-MIN);w=s.x+s.w-nx;x=nx;}
+    if(ty.includes("r")){w=clamp(s.w+dx,MIN,1-s.x);}
+    if(ty.includes("t")){const ny=clamp(s.y+dy,0,s.y+s.h-MIN);h=s.y+s.h-ny;y=ny;}
+    if(ty.includes("b")){h=clamp(s.h+dy,MIN,1-s.y);}
+    r.x=x;r.y=y;r.w=w;r.h=h;
+  }
+  render();
+});
+function endPointer(){
+  if(state.action==="draw"&&!state.snap){state.sel=-1;render();}
+  if(state.action&&state.action.startsWith("resize")&&!state.editCrop){const r=R()[state.sel];if(r&&(r.w<.008||r.h<.008)&&state.snap&&state.snap.w===0){R().splice(state.sel,1);state.sel=R().length-1;render();}}
+  state.action=null;state.snap=null;
+}
+stageInner.addEventListener("pointerup",endPointer);stageInner.addEventListener("pointercancel",endPointer);
+function updateCropUI(){
+  const c=curCrop();
+  $("cropBtn").classList.toggle("active",!!c);
+  $("addRect").disabled=state.editCrop;$("colorBtn").disabled=state.editCrop;
+  $("delRect").title=t(state.editCrop?"cropRemoveTitle":"delTitle");
+  $("editorHint").textContent=t(state.editCrop?"cropHint":"editorHint");
+  $("cropBar").style.display=c?"flex":"none";
+  $("cropFmtCrop").classList.toggle("active",!state.cropA4);
+  $("cropFmtA4").classList.toggle("active",state.cropA4);
+  $("cropFmtHint").textContent=t(state.cropA4?"cropFmtHintA4":"cropFmtHintCrop");
+  const showOr=!!c&&state.cropA4;
+  $("a4OrientGroup").style.display=showOr?"inline-flex":"none";
+  $("a4OrientHint").style.display=showOr?"block":"none";
+  $("a4OrientSrc").classList.toggle("active",state.a4Orient==="source");
+  $("a4OrientAuto").classList.toggle("active",state.a4Orient==="auto");
+  $("a4OrientSrc").textContent=t("a4OrientSrc")+" ("+t(state.srcLand?"landscape":"portrait")+")";
+  $("a4OrientHint").textContent=t(state.a4Orient==="source"?"a4OrientHintSrc":"a4OrientHintAuto");
+  if(c){
+    $("cropBarText").textContent=(state.pageMode==="manual"&&state.pageCrops)?t("cropBannerPage",{n:state.curPage}):t("cropBannerAll");
+    $("cropAdjustBtn").textContent=t(state.editCrop?"cropAdjustDone":"cropAdjust");
+  }
+}
+$("addRect").addEventListener("click",()=>{
+  if(state.editCrop)return;
+  const rects=maskRects(),v=visibleCanvasRegion();
+  const w=Math.max(.04,Math.min(.25,v.w*.7)),h=Math.max(.04,Math.min(.18,v.h*.7));
+  const k=Math.min(.06,.015*rects.length);
+  let x=v.x+(v.w-w)/2+k,y=v.y+(v.h-h)/2+k;
+  const ux=Math.min(1-w,v.x+v.w-w),uy=Math.min(1-h,v.y+v.h-h);
+  if(ux>=v.x)x=clamp(x,v.x,ux);
+  if(uy>=v.y)y=clamp(y,v.y,uy);
+  x=clamp(x,0,1-w);y=clamp(y,0,1-h);
+  rects.push({x,y,w,h,color:"#ffffff"});
+  state.sel=rects.length-1;render();toast(t("rectAdded"),"ok",1500);
+});
+$("delRect").addEventListener("click",()=>{
+  if(state.editCrop){setCurCrop(null);state.editCrop=false;state.sel=-1;updateCropUI();render();toast(t("cropRemoved"),"ok",1500);return;}
+  const rects=maskRects();if(!rects.length){toast(t("noRects"),"warn");return;}
+  if(state.sel<0)state.sel=rects.length-1;rects.splice(state.sel,1);state.sel=Math.min(state.sel,rects.length-1);render();toast(t("rectRemoved"),"ok",1500);
+});
+$("colorBtn").addEventListener("click",()=>{if(state.editCrop)return;if(state.sel<0||!maskRects()[state.sel]){toast(t("selectForColor"),"warn");return;}const ci=$("colorInput");ci.value=maskRects()[state.sel].color;ci.click();});
+$("colorInput").addEventListener("input",e=>{if(!state.editCrop&&state.sel>=0&&maskRects()[state.sel]){maskRects()[state.sel].color=e.target.value;render();}});
+$("cropBtn").addEventListener("click",()=>{
+  if(!state.preview){toast(t("needFiles"),"warn");return;}
+  if(!curCrop()){setCurCrop({x:.05,y:.05,w:.9,h:.9});state.editCrop=true;state.sel=0;toast(t("cropAdded"),"ok",2000);}
+  else{state.editCrop=!state.editCrop;state.sel=state.editCrop?0:-1;}
+  updateCropUI();render();
+});
+$("cropAdjustBtn").addEventListener("click",()=>{
+  if(!curCrop())return;
+  state.editCrop=!state.editCrop;state.sel=state.editCrop?0:-1;updateCropUI();render();
+});
+$("cropRemoveBtn").addEventListener("click",()=>{
+  setCurCrop(null);state.editCrop=false;state.sel=-1;updateCropUI();render();toast(t("cropRemoved"),"ok",1500);
+});
+$("cropFmtCrop").addEventListener("click",()=>{state.cropA4=false;updateCropUI();render();toast(t("cropToastCrop"),"ok",2200);});
+$("cropFmtA4").addEventListener("click",()=>{state.cropA4=true;updateCropUI();render();toast(t("cropToastA4"),"ok",2200);});
+$("a4OrientSrc").addEventListener("click",()=>{state.a4Orient="source";updateCropUI();render();toast(t("a4OrientToastSrc"),"ok",2600);});
+$("a4OrientAuto").addEventListener("click",()=>{state.a4Orient="auto";updateCropUI();render();toast(t("a4OrientToastAuto"),"ok",3200);});
+$("zoomIn").addEventListener("click",()=>{state.zoom=Math.min(5,state.zoom*1.25);fitZoom();});
+$("zoomOut").addEventListener("click",()=>{state.zoom=Math.max(.5,state.zoom/1.25);fitZoom();});
+$("zoomFit").addEventListener("click",()=>{state.zoom=1;fitZoom();});
+window.addEventListener("resize",()=>{if(state.preview)fitZoom();});
+document.querySelectorAll(".paper div").forEach(q=>{q.addEventListener("click",()=>{
+  if(state.editCrop){state.editCrop=false;updateCropUI();}
+  const i=parseInt(q.dataset.q,10),rects=maskRects();if(!rects.length)rects.push({x:0,y:0,w:.5,h:.5,color:"#ffffff"});
+  const r=rects[0];r.x=(i%2)*.5;r.y=(i>1)?.5:0;r.w=.5;r.h=.5;state.sel=0;render();
+});});
+document.addEventListener("keydown",e=>{
+  if(/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
+  if(state.pageMode==="manual"&&e.key==="PageDown"){e.preventDefault();renderPdfPage(state.curPage+1);return;}
+  if(state.pageMode==="manual"&&e.key==="PageUp"){e.preventDefault();renderPdfPage(state.curPage-1);return;}
+  if((e.key==="Delete"||e.key==="Backspace")&&state.sel>=0){e.preventDefault();$("delRect").click();}
+  else if(e.key==="Escape"){if(state.editCrop){state.editCrop=false;updateCropUI();}state.sel=-1;render();}
+  else if(state.sel>=0&&e.key.startsWith("Arrow")){e.preventDefault();const r=R()[state.sel];if(!r)return;const d=e.shiftKey?.01:.002;if(e.key==="ArrowLeft")r.x=clamp(r.x-d,0,1-r.w);if(e.key==="ArrowRight")r.x=clamp(r.x+d,0,1-r.w);if(e.key==="ArrowUp")r.y=clamp(r.y-d,0,1-r.h);if(e.key==="ArrowDown")r.y=clamp(r.y+d,0,1-r.h);render();}
+});
+
+/* ===== 8. Output options ===== */
+function currentMode(){return document.querySelector('input[name="mode"]:checked').value;}
+function hasPdf(){return state.files.some(isPdf);}
+function updateOptions(){
+  const fmt=$("fmt").value,mode=currentMode();$("modeWrap").style.display=fmt==="pdf"?"block":"none";
+  const rasterPdf=fmt==="pdf"&&(mode==="secure"||!hasPdf());
+  $("qualityWrap").style.display=(fmt!=="pdf"&&fmt!=="image/png"&&fmt!=="image/gif")||rasterPdf?"block":"none";
+  $("dpiWrap").style.display=hasPdf()&&(fmt!=="pdf"||mode==="secure")?"block":"none";
+  let key;if(fmt==="pdf")key=hasPdf()?(mode==="simple"?"hintPdfSimple":"hintPdfSecure"):"hintPdfFromImg";
+  else key={"image/png":"hintPng","image/jpeg":"hintJpeg","image/webp":"hintWebp","image/avif":"hintAvif","image/gif":"hintGif"}[fmt];
+  const hint=$("fmtHint");hint.textContent=t(key);hint.className="info"+(fmt==="pdf"&&mode==="simple"&&hasPdf()?" warn":"");
+}
+$("fmt").addEventListener("change",updateOptions);
+document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener("change",updateOptions));
+$("quality").addEventListener("input",e=>{$("qualityOut").textContent=e.target.value+" %";});
+$("dpi").addEventListener("change",updateOptions);
+let webpOk=true,avifPath=null;
+function updateAvifLabel(){const opt=document.querySelector('#fmt option[value="image/avif"]');if(opt)opt.textContent=t("fmtAvif")+(avifPath===null?t("unsupported"):"");}
+function probeWebp(){const c=document.createElement("canvas");c.width=c.height=1;c.toBlob(b=>{webpOk=!!(b&&b.type==="image/webp");if(!webpOk){const opt=document.querySelector('#fmt option[value="image/webp"]');if(opt)opt.textContent=t("fmtWebp")+t("unsupported");}},"image/webp",.8);}
+const avifProbe=(async()=>{
+  try{
+    const c=document.createElement("canvas");c.width=c.height=2;const b=await new Promise(r=>c.toBlob(r,"image/avif",.8));
+    if(b&&b.type==="image/avif"){avifPath="canvas";updateAvifLabel();return;}
+    if("VideoEncoder" in window){const s=await VideoEncoder.isConfigSupported({codec:"av01.0.04M.08",width:64,height:64,bitrate:200000,framerate:1});if(s&&s.supported){avifPath="webcodecs";updateAvifLabel();return;}}
+  }catch(e){}
+  avifPath=null;updateAvifLabel();
+})();
+
+/* ===== 9. Processing ===== */
+function canvasBlob(c,type,q){return new Promise(res=>c.toBlob(b=>res(b),type,q));}
+function cropCanvas(c,crop){
+  if(!crop)return c;
+  const sx=Math.round(crop.x*c.width),sy=Math.round(crop.y*c.height),sw=Math.max(1,Math.round(crop.w*c.width)),sh=Math.max(1,Math.round(crop.h*c.height));
+  const o=document.createElement("canvas");o.width=sw;o.height=sh;
+  const ox=o.getContext("2d",{alpha:false});ox.fillStyle="#fff";ox.fillRect(0,0,sw,sh);
+  ox.drawImage(c,sx,sy,sw,sh,0,0,sw,sh);return o;
+}
+function fitA4Page(c,land){
+  const L=(land===null||land===undefined)?(c.width>c.height):!!land;
+  const [PW,PH]=a4Size(L);
+  const s=Math.min(PW/c.width,PH/c.height),iw=c.width*s,ih=c.height*s;
+  return {pw:PW,ph:PH,iw,ih,ox:(PW-iw)/2,oy:(PH-ih)/2};
+}
+function padToA4(c,dpi,land){
+  const L=(land===null||land===undefined)?(c.width>c.height):!!land;
+  const [PW,PH]=a4Size(L);
+  const W=Math.max(1,Math.round(PW*dpi/72)),H=Math.max(1,Math.round(PH*dpi/72));
+  const o=document.createElement("canvas");o.width=W;o.height=H;
+  const x=o.getContext("2d",{alpha:false});x.fillStyle="#ffffff";x.fillRect(0,0,W,H);
+  const s=Math.min(W/c.width,H/c.height),iw=c.width*s,ih=c.height*s;
+  x.imageSmoothingQuality="high";x.drawImage(c,(W-iw)/2,(H-ih)/2,iw,ih);
+  return o;
+}
+async function encodeImage(c,mime,q){
+  if(mime==="image/gif"){const d=c.getContext("2d").getImageData(0,0,c.width,c.height);return {blob:new Blob([encodeGIF(d)],{type:"image/gif"}),mime:"image/gif"};}
+  if(mime==="image/avif"){
+    await avifProbe;
+    if(avifPath==="canvas"){const b=await canvasBlob(c,mime,q);if(b&&b.type===mime)return {blob:b,mime};}
+    else if(avifPath==="webcodecs"){try{return {blob:await encodeAvifWebCodecs(c,q),mime};}catch(e){console.warn("AVIF:",e);}}
+  }else{const b=await canvasBlob(c,mime,q);if(b&&b.type===mime)return {blob:b,mime};}
+  const w=await canvasBlob(c,"image/webp",q);if(w&&w.type==="image/webp")return {blob:w,mime:"image/webp",fell:true};
+  const p=await canvasBlob(c,"image/png");return {blob:p,mime:"image/png",fell:true};
+}
+function drawRectsOpaque(c2,rects,W,H){
+  if(!rects||!rects.length)return;
+  c2.save();
+  c2.setTransform(1,0,0,1,0,0);
+  c2.globalAlpha=1;c2.globalCompositeOperation="source-over";c2.setLineDash([]);
+  if("filter" in c2)c2.filter="none";
+  for(const r of rects){
+    c2.fillStyle=/^#[0-9a-f]{6}$/i.test(r.color||"")?r.color:"#ffffff";
+    c2.fillRect(r.x*W,r.y*H,r.w*W,r.h*H);
+  }
+  c2.restore();
+}
+async function processImageFile(file,fmt,q,dpi,rectsFor,cropFor,keepA4,oLand,cropAny,out){
+  let bmp=await loadBitmap(file);const k=Math.min(1,8000/Math.max(bmp.width,bmp.height));if(k<1)toast(t("bigImg"),"warn");
+  let c=document.createElement("canvas");c.width=Math.max(1,Math.round(bmp.width*k));c.height=Math.max(1,Math.round(bmp.height*k));
+  const c2=c.getContext("2d",{alpha:false});c2.fillStyle="#ffffff";c2.fillRect(0,0,c.width,c.height);c2.drawImage(bmp,0,0,c.width,c.height);if(bmp.close)bmp.close();
+  drawRectsOpaque(c2,rectsFor(0),c.width,c.height);
+  const cr=cropFor(0);c=cropCanvas(c,cr);
+  const base=baseName(file.name),a4=!!cr&&keepA4;
+  if(fmt==="pdf"){
+    const jb=await canvasBlob(c,"image/jpeg",q),jpeg=new Uint8Array(await jb.arrayBuffer());
+    const pg={w:c.width,h:c.height,jpeg};
+    if(a4)Object.assign(pg,fitA4Page(c,oLand));
+    else Object.assign(pg,fitA4Page(c,null));
+    const pdf=buildRasterPdf([pg],dpi);
+    out.push({name:base+"_easyhide.pdf",blob:new Blob([pdf],{type:"application/pdf"}),raster:true,cropped:cropAny,cropA4:a4});
+  }else{
+    const oc=a4?padToA4(c,dpi,oLand):c;
+    const r=await encodeImage(oc,fmt,q);if(r.fell)noteFallback(fmt,r.mime);
+    out.push({name:base+"_easyhide."+extOf(r.mime),blob:r.blob,raster:true,cropped:cropAny,cropA4:a4});
+  }
+}
+/* Raster PDF/images: render -> encode -> VERIFY suspicious pages against a fresh document. */
+async function processPdfRaster(file,fmt,q,dpi,rectsFor,cropFor,keepA4,oLand,cropAny,out,stats){
+  const buf=await file.arrayBuffer(),base=baseName(file.name);
+  const open=()=>pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+  const items=[];
+  const encodeItem=async(it,c)=>{
+    drawRectsOpaque(c.getContext("2d"),rectsFor(it.p-1),c.width,c.height);
+    const cr=cropFor(it.p-1);
+    const cc=cropCanvas(c,cr);
+    const a4=!!cr&&keepA4;
+    if(fmt==="pdf"){
+      const jb=await canvasBlob(cc,"image/jpeg",q);
+      const pg={w:cc.width,h:cc.height,jpeg:new Uint8Array(await jb.arrayBuffer())};
+      if(a4)Object.assign(pg,fitA4Page(cc,oLand));
+      else if(cr)Object.assign(pg,{pw:it.pw0*cr.w,ph:it.ph0*cr.h,iw:it.pw0*cr.w,ih:it.ph0*cr.h,ox:0,oy:0});
+      else Object.assign(pg,{pw:it.pw0,ph:it.ph0,iw:it.pw0,ih:it.ph0,ox:0,oy:0});
+      it.payload=pg;
+    }else{
+      const oc=a4?padToA4(cc,dpi,oLand):cc;
+      const r=await encodeImage(oc,fmt,q);
+      if(r.fell)noteFallback(fmt,r.mime);
+      it.payload=r;
+    }
+    it.a4=a4;it.hasCrop=!!cr;
+  };
+  let doc=await open();
+  try{
+    for(let p=1;p<=doc.numPages;p++){
+      const page=await doc.getPage(p);
+      const v1=page.getViewport({scale:1});
+      const c=await renderPageCanvas(page,dpi/72);
+      const fp=fingerprint(c);
+      const it={p,pw0:v1.width,ph0:v1.height,fp,sus:suspiciousCast(fp,false)};
+      await encodeItem(it,c);
+      items.push(it);
+    }
+  }finally{await killDoc(doc);doc=null;}
+  const bad=items.filter(i=>i.sus);
+  if(bad.length){
+    await settle(60);
+    let doc2=null;
+    try{
+      doc2=await open();
+      let k=0;
+      for(const it of bad){
+        k++;$("progressText").textContent=t("verifying",{i:k,n:bad.length});
+        const page=await doc2.getPage(it.p);
+        const c2=await renderPageCanvas(page,dpi/72,true);
+        const fp2=fingerprint(c2);
+        if(fpDiff(it.fp,fp2)>6||(it.fp.flat&&!fp2.flat)){
+          await encodeItem(it,c2);it.fp=fp2;stats.fixed++;
         }
+      }
+    }catch(e){console.warn("verify:",e);}
+    finally{await killDoc(doc2);doc2=null;}
+  }
+  if(fmt==="pdf"){
+    if(items.length){
+      const pdf=buildRasterPdf(items.map(i=>i.payload),dpi);
+      out.push({name:base+"_easyhide.pdf",blob:new Blob([pdf],{type:"application/pdf"}),raster:true,cropped:cropAny,cropA4:cropAny&&keepA4});
+    }
+  }else{
+    for(const it of items){
+      const suffix=items.length>1?"_p"+it.p:"";
+      out.push({name:base+suffix+"_easyhide."+extOf(it.payload.mime),blob:it.payload.blob,raster:true,cropped:it.hasCrop,cropA4:it.a4});
+    }
+  }
+}
+async function processPdfFile(file,fmt,mode,q,dpi,rectsFor,cropFor,keepA4,oLand,cropAny,out,stats){
+  if(fmt==="pdf"&&mode==="simple"){
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfOverlay(new Uint8Array(buf),rectsFor,cropFor,keepA4,oLand);
+    out.push({name:baseName(file.name)+"_easyhide.pdf",blob:new Blob([pdf],{type:"application/pdf"}),raster:false,cropped:cropAny,cropA4:cropAny&&keepA4,origSize:file.size});
+    return;
+  }
+  await processPdfRaster(file,fmt,q,dpi,rectsFor,cropFor,keepA4,oLand,cropAny,out,stats);
+}
+let fellNotes=new Set();
+function noteFallback(from,to){const k=from+"→"+to;if(fellNotes.has(k))return;fellNotes.add(k);toast(t("fellBack",{from:extOf(from).toUpperCase(),to:extOf(to).toUpperCase()}),"warn",5000);}
+function clearResults(){state.results.forEach(r=>{if(r.url)URL.revokeObjectURL(r.url);});state.results=[];$("results").style.display="none";$("resultList").innerHTML="";}
+function renderResults(errors){
+  const list=$("resultList");list.innerHTML="";
+  state.results.forEach(r=>{
+    r.url=URL.createObjectURL(r.blob);
+    const row=document.createElement("div");row.className="resrow";
+    const nm=document.createElement("span");nm.className="nm";nm.textContent=r.name;
+    const sz=document.createElement("span");sz.className="sz";sz.textContent=fmtSize(r.blob.size)+(r.origSize?" ("+fmtSize(r.origSize)+" → "+fmtSize(r.blob.size)+")":"");
+    const bg=document.createElement("span");bg.className="badge "+(r.raster?"gray":"green");bg.textContent=t(r.raster?"badgeRaster":"badgeSimple");
+    row.append(nm,sz,bg);
+    if(r.cropped){const cb=document.createElement("span");cb.className="badge gray";cb.textContent=t(r.cropA4?"badgeCroppedA4":"badgeCropped");row.append(cb);}
+    const a=document.createElement("a");a.className="btn sm";a.href=r.url;a.download=r.name;a.textContent=t("download");row.append(a);
+    list.appendChild(row);
+  });
+  errors.forEach(er=>{const row=document.createElement("div");row.className="resrow err";const nm=document.createElement("span");nm.className="nm";nm.textContent=er.name+" - "+t("errFile",{msg:errMessage(er.msg)});row.appendChild(nm);list.appendChild(row);});
+  $("zipBtn").style.display=state.results.length?"inline-flex":"none";$("results").style.display=(state.results.length||errors.length)?"block":"none";
+}
+$("applyBtn").addEventListener("click",async()=>{
+  if(state.busy)return;
+  if(!state.files.length){toast(t("needFiles"),"err");return;}
+  if(state.pageLoading){toast(t("waitRender"),"warn");return;}
+  state.busy=true;fellNotes=new Set();bigPageWarned=false;clearResults();
+  $("applyBtn").disabled=true;$("progress").style.display="flex";
+  const fmt=$("fmt").value,mode=currentMode(),q=parseInt($("quality").value,10)/100,dpi=parseInt($("dpi").value,10);
+  const manual=state.pageMode==="manual"&&state.pageRects;
+  const rectsFor=manual?(i=>state.pageRects[i]||[]):(()=>state.rects);
+  const cropFor=manual?(i=>(state.pageCrops&&state.pageCrops[i])||null):(()=>state.crop);
+  const cropAny=manual?state.pageCrops.some(c=>!!c):!!state.crop;
+  const keepA4=state.cropA4,oLand=orientLand();
+  const previewWasPdf=!!state.pdfDoc;
+  await destroyDoc();          /* never two documents open at once */
+  await settle();
+  const errors=[],out=[],stats={fixed:0};
+  try{
+    for(let i=0;i<state.files.length;i++){
+      const f=state.files[i];$("progressText").textContent=t("processing",{name:f.name,i:i+1,n:state.files.length});
+      try{
+        if(isPdf(f))await processPdfFile(f,fmt,mode,q,dpi,rectsFor,cropFor,keepA4,oLand,cropAny,out,stats);
+        else if(isImg(f))await processImageFile(f,fmt,q,dpi,rectsFor,cropFor,keepA4,oLand,cropAny,out);
+        else throw new Error("TYPE");
+      }catch(err){console.error(f.name,err);errors.push({name:f.name,msg:err.message||"?"});}
+      await settle(30);
+    }
+  }finally{
+    state.results=out;renderResults(errors);
+    $("progress").style.display="none";state.busy=false;$("applyBtn").disabled=!state.preview;
+    if(previewWasPdf)await reopenPreviewDoc();
+    updateCropUI();updatePageUI();
+  }
+  if(stats.fixed)toast(t("renderFixed",{n:stats.fixed}),"warn",6000);
+  toast(out.length?t("done",{n:out.length}):t("doneNone"),out.length?"ok":"err",4500);
+  if(out.length||errors.length)$("results").scrollIntoView({behavior:"smooth",block:"start"});
+});
+$("zipBtn").addEventListener("click",async()=>{
+  if(!state.results.length)return;const files=[];for(const r of state.results)files.push({name:r.name,data:new Uint8Array(await r.blob.arrayBuffer())});
+  const zip=makeZip(files),u=URL.createObjectURL(new Blob([zip],{type:"application/zip"})),a=document.createElement("a");a.href=u;a.download=t("zipName");document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);
+});
 
-        function checkInitiateButtonState() {
-            initiateProcessingButton.disabled = !(allUploadedFiles.length > 0 && selectedQuadrantInfo.quadrantIndex !== null);
-        }
-
-        allQuadrants.forEach(quadrant => {
-            quadrant.addEventListener('click', () => {
-                allQuadrants.forEach(q => q.classList.remove('selected'));
-                quadrant.classList.add('selected');
-                selectedQuadrantInfo.orientation = quadrant.dataset.orientation;
-                selectedQuadrantInfo.quadrantIndex = parseInt(quadrant.dataset.quadrant);
-                checkInitiateButtonState();
-                showMessage(`Zone initiale: ${selectedQuadrantInfo.orientation}, Q${selectedQuadrantInfo.quadrantIndex + 1}. Téléversez des fichiers.`, 'info');
-            });
-        });
-
-        fileUpload.addEventListener('change', (event) => {
-            if (event.target.files.length === 0) {
-                allUploadedFiles = [];
-                currentFileForAdjustment = null;
-                resetCanvasAndState(false); 
-                checkInitiateButtonState();
-                return;
-            }
-            
-            allUploadedFiles = Array.from(event.target.files);
-            currentFileForAdjustment = null; 
-            resetCanvasAndState(false); 
-
-            if (allUploadedFiles.length > 0) {
-                showMessage(`${allUploadedFiles.length} fichier(s) sélectionné(s). Prêt à ajuster le 1er.`, 'success');
-            }
-            checkInitiateButtonState();
-        });
-        
-        async function loadFileForAdjustment(file) {
-            return new Promise((resolve, reject) => {
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const img = new Image();
-                        img.onload = () => resolve(img);
-                        img.onerror = () => reject(new Error('Erreur chargement image pour ajustement.'));
-                        img.src = e.target.result;
-                    };
-                    reader.onerror = () => reject(new Error('Erreur lecture fichier image.'));
-                    reader.readAsDataURL(file);
-                } else if (file.type === 'application/pdf') {
-                    const fileReader = new FileReader();
-                    fileReader.onload = function() {
-                        const typedarray = new Uint8Array(this.result);
-                        pdfjsLib.getDocument(typedarray).promise.then(pdfDoc_ => {
-                            pdfDoc_.getPage(1).then(page => {
-                                const viewport = page.getViewport({ scale: 2.0 }); 
-                                const tempCanvas = document.createElement('canvas');
-                                const tempCtx = tempCanvas.getContext('2d');
-                                tempCanvas.height = viewport.height;
-                                tempCanvas.width = viewport.width;
-                                page.render({ canvasContext: tempCtx, viewport: viewport }).promise.then(() => {
-                                    const img = new Image();
-                                    img.onload = () => resolve(img); 
-                                    img.onerror = () => reject(new Error('Erreur conversion 1ère page PDF en image.'));
-                                    img.src = tempCanvas.toDataURL('image/png');
-                                }).catch(reject);
-                            }).catch(reject);
-                        }).catch(reject);
-                    };
-                    fileReader.onerror = () => reject(new Error('Erreur lecture fichier PDF.'));
-                    fileReader.readAsArrayBuffer(file);
-                } else {
-                    reject(new Error('Type de fichier non supporté pour l\'ajustement.'));
-                }
-            });
-        }
-
-        initiateProcessingButton.addEventListener('click', async () => {
-            if (allUploadedFiles.length === 0 || selectedQuadrantInfo.quadrantIndex === null) {
-                showMessage('Sélectionnez zone ET téléversez au moins un fichier.', 'error');
-                return;
-            }
-            
-            loader.style.display = 'block';
-            initiateProcessingButton.disabled = true;
-
-            try {
-                currentFileForAdjustment = await loadFileForAdjustment(allUploadedFiles[0]);
-                setupInteractiveStage(currentFileForAdjustment); 
-                initiateProcessingButton.classList.add('hidden');
-                applyAndDownloadButton.classList.remove('hidden');
-                imageCanvas.style.display = 'block';
-                showMessage('Ajustez le rectangle sur ce 1er fichier, puis validez.', 'info');
-            } catch (error) {
-                showMessage(error.message || 'Erreur chargement du 1er fichier.', 'error');
-                console.error("Error loading first file for adjustment:", error);
-            } finally {
-                loader.style.display = 'none';
-                initiateProcessingButton.disabled = false; 
-            }
-        });
-
-        function setupInteractiveStage(imageToAdjust) { 
-            imageCanvas.width = imageToAdjust.width;
-            imageCanvas.height = imageToAdjust.height;
-            
-            const imgW = imageToAdjust.width;
-            const imgH = imageToAdjust.height;
-            currentSelectionRect.w = imgW / 2;
-            currentSelectionRect.h = imgH / 2;
-
-            switch (selectedQuadrantInfo.quadrantIndex) {
-                case 0: currentSelectionRect.x = 0; currentSelectionRect.y = 0; break;
-                case 1: currentSelectionRect.x = imgW / 2; currentSelectionRect.y = 0; break;
-                case 2: currentSelectionRect.x = 0; currentSelectionRect.y = imgH / 2; break;
-                case 3: currentSelectionRect.x = imgW / 2; currentSelectionRect.y = imgH / 2; break;
-            }
-            currentSelectionRect.isDefined = true;
-            createHandles();
-            drawCanvasWithSelectionAndHandles(imageToAdjust); 
-        }
-        
-        function drawCanvasWithSelectionAndHandles(imageToDraw, isFinal = false) {
-            if (!imageToDraw) return; 
-            ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            ctx.drawImage(imageToDraw, 0, 0, imageCanvas.width, imageCanvas.height); 
-
-            if (currentSelectionRect.isDefined) {
-                if (isFinal) {
-                    ctx.fillStyle = 'white';
-                    ctx.fillRect(currentSelectionRect.x, currentSelectionRect.y, currentSelectionRect.w, currentSelectionRect.h);
-                    removeHandles(); 
-                } else {
-                    ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(currentSelectionRect.x, currentSelectionRect.y, currentSelectionRect.w, currentSelectionRect.h);
-                    updateHandlesPositions();
-                }
-            }
-        }
-
-        function createHandles() {
-            removeHandles(); 
-            const handleTypes = ['tl', 't', 'tr', 'l', 'r', 'bl', 'b', 'br']; 
-            handleTypes.forEach(type => {
-                const handle = document.createElement('div');
-                handle.classList.add('handle');
-                handle.dataset.type = type;
-                canvasContainer.appendChild(handle);
-                handles.push(handle);
-            });
-            updateHandlesPositions(); 
-        }
-
-        function removeHandles() {
-            handles.forEach(h => h.remove());
-            handles = [];
-        }
-
-        function updateHandlesPositions() {
-            if (!currentSelectionRect.isDefined || handles.length === 0 || !imageCanvas.offsetParent) return;
-            const { x, y, w, h } = currentSelectionRect;
-            const canvasRect = imageCanvas.getBoundingClientRect(); 
-
-            const scaleX = canvasRect.width / imageCanvas.width;
-            const scaleY = canvasRect.height / imageCanvas.height;
-
-            const positions = {
-                'tl': { left: x * scaleX - HANDLE_SIZE / 2, top: y * scaleY - HANDLE_SIZE / 2 },
-                't':  { left: (x + w / 2) * scaleX - HANDLE_SIZE / 2, top: y * scaleY - HANDLE_SIZE / 2 },
-                'tr': { left: (x + w) * scaleX - HANDLE_SIZE / 2, top: y * scaleY - HANDLE_SIZE / 2 },
-                'l':  { left: x * scaleX - HANDLE_SIZE / 2, top: (y + h / 2) * scaleY - HANDLE_SIZE / 2 },
-                'r':  { left: (x + w) * scaleX - HANDLE_SIZE / 2, top: (y + h / 2) * scaleY - HANDLE_SIZE / 2 },
-                'bl': { left: x * scaleX - HANDLE_SIZE / 2, top: (y + h) * scaleY - HANDLE_SIZE / 2 },
-                'b':  { left: (x + w / 2) * scaleX - HANDLE_SIZE / 2, top: (y + h) * scaleY - HANDLE_SIZE / 2 },
-                'br': { left: (x + w) * scaleX - HANDLE_SIZE / 2, top: (y + h) * scaleY - HANDLE_SIZE / 2 }
-            };
-
-            handles.forEach(handle => {
-                const type = handle.dataset.type;
-                handle.style.left = `${canvasRect.left + positions[type].left - canvasContainer.getBoundingClientRect().left}px`;
-                handle.style.top = `${canvasRect.top + positions[type].top - canvasContainer.getBoundingClientRect().top}px`;
-                handle.style.cursor = getResizeCursor(type);
-                handle.style.display = 'block';
-            });
-        }
-        
-        function getResizeCursor(handleType) { 
-            switch (handleType) {
-                case 'tl': case 'br': return 'nwse-resize';
-                case 'tr': case 'bl': return 'nesw-resize';
-                case 't':  case 'b':  return 'ns-resize';
-                case 'l':  case 'r':  return 'ew-resize';
-                default: return 'default';
-            }
-        }
-        function getEventPosOnCanvas(event) { 
-            const rect = imageCanvas.getBoundingClientRect();
-            let clientX, clientY;
-            if (event.touches && event.touches.length > 0) {
-                clientX = event.touches[0].clientX;
-                clientY = event.touches[0].clientY;
-            } else {
-                clientX = event.clientX;
-                clientY = event.clientY;
-            }
-            return {
-                x: (clientX - rect.left) * (imageCanvas.width / rect.width),
-                y: (clientY - rect.top) * (imageCanvas.height / rect.height)
-            };
-        }
-        function handleInteractionStart(e) { 
-            if (!currentSelectionRect.isDefined || !currentFileForAdjustment) return; 
-            
-            const target = e.target;
-            const eventPos = getEventPosOnCanvas(e);
-
-            if (target.classList.contains('handle')) { 
-                activeDragAction = `resize-${target.dataset.type}`;
-            } else if (target === imageCanvas && 
-                       eventPos.x >= currentSelectionRect.x && eventPos.x <= currentSelectionRect.x + currentSelectionRect.w &&
-                       eventPos.y >= currentSelectionRect.y && eventPos.y <= currentSelectionRect.y + currentSelectionRect.h) {
-                activeDragAction = 'move';
-            } else {
-                return; 
-            }
-            
-            if (activeDragAction && e.cancelable) {
-                 e.preventDefault();
-            }
-            dragStartCoords = eventPos;
-            rectStartCoords = { ...currentSelectionRect }; 
-        }
-        function handleInteractionMove(e) { 
-            if (!activeDragAction || !currentSelectionRect.isDefined) {
-                if (e.type === 'mousemove' && (e.target === imageCanvas || e.target.classList.contains('handle'))) {
-                    const mousePos = getEventPosOnCanvas(e);
-                    let cursor = 'default';
-                    if (currentSelectionRect.isDefined) {
-                        for (const handle of handles) {
-                            const handleRect = handle.getBoundingClientRect();
-                            const canvasRect = imageCanvas.getBoundingClientRect();
-                            const handleCanvasX = (handleRect.left - canvasRect.left + HANDLE_SIZE/2) * (imageCanvas.width / canvasRect.width);
-                            const handleCanvasY = (handleRect.top - canvasRect.top + HANDLE_SIZE/2) * (imageCanvas.height / canvasRect.height);
-                            
-                            if (Math.abs(mousePos.x - handleCanvasX) < HANDLE_SIZE && Math.abs(mousePos.y - handleCanvasY) < HANDLE_SIZE * 1.5) {
-                                cursor = getResizeCursor(handle.dataset.type);
-                                break;
-                            }
-                        }
-                        if (cursor === 'default' && 
-                            mousePos.x >= currentSelectionRect.x && mousePos.x <= currentSelectionRect.x + currentSelectionRect.w &&
-                            mousePos.y >= currentSelectionRect.y && mousePos.y <= currentSelectionRect.y + currentSelectionRect.h) {
-                            cursor = 'move';
-                        }
-                    }
-                    imageCanvas.style.cursor = cursor;
-                }
-                return;
-            }
-
-            if (e.cancelable) {
-                e.preventDefault(); 
-            }
-
-            const eventPos = getEventPosOnCanvas(e);
-            const deltaX = eventPos.x - dragStartCoords.x;
-            const deltaY = eventPos.y - dragStartCoords.y;
-            let { x, y, w, h } = rectStartCoords; 
-
-            if (activeDragAction === 'move') {
-                x += deltaX;
-                y += deltaY;
-            } else if (activeDragAction.startsWith('resize-')) {
-                const type = activeDragAction.split('-')[1];
-                if (type.includes('l')) { x += deltaX; w -= deltaX; }
-                if (type.includes('r')) { w += deltaX; }
-                if (type.includes('t')) { y += deltaY; h -= deltaY; }
-                if (type.includes('b')) { h += deltaY; }
-            }
-
-            const minSize = 20; 
-            if (w < minSize) {
-                if (activeDragAction.includes('l') || activeDragAction.includes('tl') || activeDragAction.includes('bl')) x = rectStartCoords.x + rectStartCoords.w - minSize;
-                w = minSize;
-            }
-            if (h < minSize) {
-                if (activeDragAction.includes('t') || activeDragAction.includes('tl') || activeDragAction.includes('tr')) y = rectStartCoords.y + rectStartCoords.h - minSize;
-                h = minSize;
-            }
-            
-            x = Math.max(0, Math.min(x, imageCanvas.width - w));
-            y = Math.max(0, Math.min(y, imageCanvas.height - h));
-            w = Math.min(w, imageCanvas.width - x);
-            h = Math.min(h, imageCanvas.height - y);
-
-            currentSelectionRect = { x, y, w, h, isDefined: true };
-            drawCanvasWithSelectionAndHandles(currentFileForAdjustment); 
-        }
-        function handleInteractionEnd(e) { 
-             if (activeDragAction) {
-                activeDragAction = null;
-                imageCanvas.style.cursor = 'default'; 
-                updateHandlesPositions(); 
-            }
-        }
-
-        canvasContainer.addEventListener('mousedown', handleInteractionStart);
-        document.addEventListener('mousemove', handleInteractionMove);
-        document.addEventListener('mouseup', handleInteractionEnd);
-        canvasContainer.addEventListener('touchstart', handleInteractionStart, { passive: false });
-        document.addEventListener('touchmove', handleInteractionMove, { passive: false });
-        document.addEventListener('touchend', handleInteractionEnd);
-        
-        applyAndDownloadButton.addEventListener('click', async () => {
-            if (!currentSelectionRect.isDefined || allUploadedFiles.length === 0) {
-                showMessage('Zone non définie ou aucun fichier chargé.', 'error');
-                return;
-            }
-            loader.style.display = 'block';
-            applyAndDownloadButton.disabled = true;
-            let filesProcessedCount = 0;
-            const chosenOutputFormat = outputFormatSelect.value;
-
-            for (let i = 0; i < allUploadedFiles.length; i++) {
-                const file = allUploadedFiles[i];
-                const originalFilename = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-                showMessage(`Traitement de ${file.name} (${i+1}/${allUploadedFiles.length})...`, 'info', 60000); 
-
-                try {
-                    let effectiveOutputFormat = chosenOutputFormat;
-                    if (chosenOutputFormat === 'source') {
-                        effectiveOutputFormat = file.type.startsWith('image/') ? (file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png') : 'application/pdf';
-                    }
-                    
-                    if (file.type.startsWith('image/')) {
-                        const img = await loadFileForAdjustment(file); 
-                        const tempCanvas = document.createElement('canvas');
-                        const tempCtx = tempCanvas.getContext('2d');
-                        tempCanvas.width = img.width;
-                        tempCanvas.height = img.height;
-                        tempCtx.drawImage(img, 0, 0);
-                        tempCtx.fillStyle = 'white';
-                        
-                        const scaleX = img.width / currentFileForAdjustment.width;
-                        const scaleY = img.height / currentFileForAdjustment.height;
-                        tempCtx.fillRect(currentSelectionRect.x * scaleX, 
-                                         currentSelectionRect.y * scaleY, 
-                                         currentSelectionRect.w * scaleX, 
-                                         currentSelectionRect.h * scaleY);
-                        
-                        if (effectiveOutputFormat === 'application/pdf') { 
-                            const pdfOutput = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
-                            const pageDataUrl = tempCanvas.toDataURL('image/png'); 
-                            
-                            let pageOrientation = img.width > img.height ? 'l' : 'p';
-                            let targetWidthPt = pageOrientation === 'l' ? A4_HEIGHT_PT : A4_WIDTH_PT;
-                            let targetHeightPt = pageOrientation === 'l' ? A4_WIDTH_PT : A4_HEIGHT_PT;
-                            
-                            pdfOutput.internal.pageSize.width = targetWidthPt;
-                            pdfOutput.internal.pageSize.height = targetHeightPt;
-
-                            const ratio = Math.min(targetWidthPt / img.width, targetHeightPt / img.height);
-                            const scaledWidth = img.width * ratio;
-                            const scaledHeight = img.height * ratio;
-                            const xOffset = (targetWidthPt - scaledWidth) / 2;
-                            const yOffset = (targetHeightPt - scaledHeight) / 2;
-
-                            pdfOutput.addImage(pageDataUrl, 'PNG', xOffset, yOffset, scaledWidth, scaledHeight);
-                            pdfOutput.save(`${originalFilename}_modifie.pdf`);
-                        } else { 
-                            const extension = effectiveOutputFormat === 'image/jpeg' ? 'jpg' : 'png';
-                            const dataURL = tempCanvas.toDataURL(effectiveOutputFormat, effectiveOutputFormat === 'image/jpeg' ? 0.9 : undefined); 
-                            triggerDownload(dataURL, `${originalFilename}_modifie.${extension}`);
-                        }
-                        filesProcessedCount++;
-
-                    } else if (file.type === 'application/pdf') { 
-                        const fileReader = new FileReader();
-                        const arrayBuffer = await new Promise((resolve, reject) => {
-                            fileReader.onload = () => resolve(fileReader.result);
-                            fileReader.onerror = reject;
-                            fileReader.readAsArrayBuffer(file);
-                        });
-                        const pdfDocInstance = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
-                        const numPages = pdfDocInstance.numPages;
-
-                        if (effectiveOutputFormat === 'image/png' || effectiveOutputFormat === 'image/jpeg') { 
-                            const page = await pdfDocInstance.getPage(1); 
-                            const viewport = page.getViewport({ scale: 2.0 }); 
-                            const tempCanvas = document.createElement('canvas');
-                            const tempCtx = tempCanvas.getContext('2d');
-                            tempCanvas.width = viewport.width;
-                            tempCanvas.height = viewport.height;
-                            await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
-                            tempCtx.fillStyle = 'white';
-                            
-                            const scaleToPageX = viewport.width / currentFileForAdjustment.width;
-                            const scaleToPageY = viewport.height / currentFileForAdjustment.height;
-                            tempCtx.fillRect(currentSelectionRect.x * scaleToPageX, 
-                                             currentSelectionRect.y * scaleToPageY, 
-                                             currentSelectionRect.w * scaleToPageX, 
-                                             currentSelectionRect.h * scaleToPageY);
-
-                            const extension = effectiveOutputFormat === 'image/jpeg' ? 'jpg' : 'png';
-                            const dataURL = tempCanvas.toDataURL(effectiveOutputFormat, effectiveOutputFormat === 'image/jpeg' ? 0.9 : undefined);
-                            triggerDownload(dataURL, `${originalFilename}_page1_modifie.${extension}`);
-                        } else { // PDF to PDF
-                            let pdfOutput; 
-                            for (let j = 1; j <= numPages; j++) {
-                                const page = await pdfDocInstance.getPage(j);
-                                const viewport = page.getViewport({ scale: 2.0 }); 
-                                
-                                let pageOrientation = viewport.width > viewport.height ? 'l' : 'p';
-                                let pageTargetWidthPt = pageOrientation === 'l' ? A4_HEIGHT_PT : A4_WIDTH_PT;
-                                let pageTargetHeightPt = pageOrientation === 'l' ? A4_WIDTH_PT : A4_HEIGHT_PT;
-
-                                if (j === 1) {
-                                    pdfOutput = new jsPDF({ orientation: pageOrientation, unit: 'pt', format: [pageTargetWidthPt, pageTargetHeightPt] });
-                                } else {
-                                    pdfOutput.addPage([pageTargetWidthPt, pageTargetHeightPt], pageOrientation);
-                                }
-                                
-                                const tempCanvas = document.createElement('canvas');
-                                const tempCtx = tempCanvas.getContext('2d');
-                                tempCanvas.width = viewport.width;   
-                                tempCanvas.height = viewport.height;
-                                await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
-                                
-                                tempCtx.fillStyle = 'white';
-                                const scaleToPageX = viewport.width / currentFileForAdjustment.width;
-                                const scaleToPageY = viewport.height / currentFileForAdjustment.height;
-                                tempCtx.fillRect(currentSelectionRect.x * scaleToPageX, 
-                                                 currentSelectionRect.y * scaleToPageY, 
-                                                 currentSelectionRect.w * scaleToPageX, 
-                                                 currentSelectionRect.h * scaleToPageY);
-                                
-                                const pageDataUrl = tempCanvas.toDataURL('image/png');
-                                const ratio = Math.min(pageTargetWidthPt / viewport.width, pageTargetHeightPt / viewport.height);
-                                const scaledWidth = viewport.width * ratio;
-                                const scaledHeight = viewport.height * ratio;
-                                const xOffset = (pageTargetWidthPt - scaledWidth) / 2;
-                                const yOffset = (pageTargetHeightPt - scaledHeight) / 2;
-                                pdfOutput.addImage(pageDataUrl, 'PNG', xOffset, yOffset, scaledWidth, scaledHeight);
-                            }
-                            if (pdfOutput) { 
-                               pdfOutput.save(`${originalFilename}_modifie.pdf`);
-                            } else if (numPages > 0) { 
-                                console.error("pdfOutput was not initialized for PDF:", file.name);
-                                showMessage(`Erreur interne lors de la création du PDF pour ${file.name}`, 'error');
-                            }
-                        }
-                        filesProcessedCount++;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 200)); 
-                } catch (err) {
-                    console.error("Erreur traitement fichier:", file.name, err);
-                    showMessage(`Erreur avec ${file.name}: ${err.message || 'Inconnue'}`, 'error');
-                }
-            }
-            
-            loader.style.display = 'none';
-            applyAndDownloadButton.disabled = false;
-            if (filesProcessedCount > 0) {
-                showMessage(`${filesProcessedCount} fichier(s) traité(s) et téléchargé(s).`, 'success');
-            } else if (allUploadedFiles.length > 0) {
-                 showMessage(`Aucun fichier n'a pu être traité avec succès.`, 'error');
-            }
-
-            initiateProcessingButton.classList.remove('hidden');
-            applyAndDownloadButton.classList.add('hidden');
-        });
-
-        function triggerDownload(dataURL, filename) {
-            const link = document.createElement('a');
-            link.href = dataURL;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-        
-        resetAllButtonTop.addEventListener('click', () => {
-            resetApplicationState();
-            showMessage('Tous les paramètres ont été réinitialisés.', 'info');
-        });
-        resetAllButtonBottom.addEventListener('click', () => {
-            resetApplicationState();
-            showMessage('Tous les paramètres ont été réinitialisés.', 'info');
-        });
-
-
-        function resetApplicationState() {
-            allQuadrants.forEach(q => q.classList.remove('selected'));
-            selectedQuadrantInfo = { orientation: null, quadrantIndex: null };
-            allUploadedFiles = [];
-            fileUpload.value = ''; 
-            resetCanvasAndState(true); 
-            outputFormatSelect.value = 'source';
-            initiateProcessingButton.disabled = true;
-            initiateProcessingButton.classList.remove('hidden');
-            applyAndDownloadButton.classList.add('hidden');
-            loader.style.display = 'none';
-            messageBox.style.display = 'none';
-        }
-
-
-        function resetCanvasAndState(resetQuadrantSelectionInternal = true) { 
-            ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            imageCanvas.style.display = 'none';
-            removeHandles();
-            currentFileForAdjustment = null; 
-            currentSelectionRect.isDefined = false;
-            activeDragAction = null;
-            
-            if (resetQuadrantSelectionInternal) { 
-                allQuadrants.forEach(q => q.classList.remove('selected'));
-                selectedQuadrantInfo = { orientation: null, quadrantIndex: null };
-            }
-            checkInitiateButtonState();
-        }
-
-        checkInitiateButtonState(); 
-        window.addEventListener('resize', () => { 
-            if (currentSelectionRect.isDefined && handles.length > 0 && imageCanvas.offsetParent) {
-                updateHandlesPositions();
-            }
-        });
-
-    </script>
+/* ===== 10. Theme, reset, lang, init ===== */
+function applyTheme(th){document.documentElement.dataset.theme=th;lsSet("eh_theme",th);$("themeBtn").textContent=th==="dark"?"☀️":"🌙";const mc=document.querySelector('meta[name="theme-color"]');if(mc)mc.content=th==="dark"?"#0b1220":"#2563eb";}
+$("themeBtn").addEventListener("click",()=>{applyTheme(document.documentElement.dataset.theme==="dark"?"light":"dark");});
+async function resetAll(){
+  clearResults();await destroyDoc();state.files=[];state.preview=null;state.rects=[{x:.5,y:.5,w:.5,h:.5,color:"#ffffff"}];state.sel=0;
+  state.zoom=1;state.action=null;state.snap=null;state.numPages=1;state.pageMode="all";state.pageRects=null;state.pageCrops=null;state.curPage=1;
+  state.pageCache.clear();state.navN=0;state.crop=null;state.cropA4=false;state.a4Orient="source";state.srcLand=false;state.editCrop=false;
+  $("fileInput").value="";$("fmt").value="pdf";document.querySelector('input[name="mode"][value="simple"]').checked=true;
+  $("quality").value=85;$("qualityOut").textContent="85 %";$("dpi").value="200";showEditor(false);
+  $("editorPlaceholder").textContent=t("editorPlaceholder");$("applyBtn").disabled=true;$("progress").style.display="none";
+  updateFileList();updateOptions();updatePageUI();updateCropUI();toast(t("resetDone"),"ok",1800);
+}
+$("resetTop").addEventListener("click",resetAll);$("resetBottom").addEventListener("click",resetAll);
+function applyLang(lang){
+  LANG=lang;lsSet("eh_lang",lang);document.documentElement.lang=lang;
+  document.title=lang==="fr"?"EasyHide - Masqueur de pubs pour bordereaux":"EasyHide - Ad hider for shipping labels";
+  document.querySelectorAll("[data-i18n]").forEach(el=>{el.textContent=t(el.dataset.i18n);});
+  document.querySelectorAll("[data-i18n-title]").forEach(el=>{el.title=t(el.dataset.i18nTitle);});
+  $("flagFr").setAttribute("aria-pressed",lang==="fr");$("flagEn").setAttribute("aria-pressed",lang==="en");
+  if(!webpOk){const opt=document.querySelector('#fmt option[value="image/webp"]');if(opt)opt.textContent=t("fmtWebp")+t("unsupported");}
+  updateAvifLabel();updateFileList();updateOptions();updatePdfStatus();updatePageUI();updateCropUI();
+  if(!state.preview)$("editorPlaceholder").textContent=t("editorPlaceholder");
+}
+$("flagFr").addEventListener("click",()=>applyLang("fr"));$("flagEn").addEventListener("click",()=>applyLang("en"));
+applyTheme(lsGet("eh_theme")==="dark"?"dark":"light");applyLang(LANG);probeWebp();updateOptions();updatePageUI();updateCropUI();
+</script>
+</body>
+</html>
